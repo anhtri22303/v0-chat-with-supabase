@@ -32,18 +32,7 @@ export async function signUp(formData: FormData) {
       return { error: { message: 'Sign up failed' } }
     }
 
-    // Create user profile with default role 'student'
-    const { error: profileError } = await supabase.from('users').insert({
-      id: data.user.id,
-      username,
-      role: 'student',
-    })
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError)
-      return { error: profileError }
-    }
-
+    // User profile is automatically created by database trigger
     revalidatePath('/', 'layout')
     return { data }
   } catch (error) {
