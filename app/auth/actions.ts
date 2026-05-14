@@ -9,7 +9,6 @@ export async function signUp(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const username = formData.get('username') as string
-  const role = formData.get('role') as string
 
   try {
     const { data, error } = await supabase.auth.signUp({
@@ -21,7 +20,6 @@ export async function signUp(formData: FormData) {
           `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
         data: {
           username,
-          role,
         },
       },
     })
@@ -34,11 +32,11 @@ export async function signUp(formData: FormData) {
       return { error: { message: 'Sign up failed' } }
     }
 
-    // Create user profile
+    // Create user profile with default role 'student'
     const { error: profileError } = await supabase.from('users').insert({
       id: data.user.id,
       username,
-      role,
+      role: 'student',
     })
 
     if (profileError) {

@@ -8,14 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-
 export default function SignUp() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
@@ -72,19 +64,6 @@ export default function SignUp() {
                 placeholder="••••••••"
                 required
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select name="role" required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="club_leader">Club Leader</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
