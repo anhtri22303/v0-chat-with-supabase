@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChatWindow } from '@/components/chat/chat-window'
-import { RoomCard } from '@/components/home/room-card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useNotifications } from '@/contexts/notification-context'
+import { ChatLayout } from '@/components/layout/chat-layout'
 
 export default function DMChatPage() {
   const router = useRouter()
@@ -16,10 +17,16 @@ export default function DMChatPage() {
   const [user, setUser] = useState<any>(null)
   const [room, setRoom] = useState<any>(null)
   const [otherUser, setOtherUser] = useState<any>(null)
-  const [rooms, setRooms] = useState<any[]>([])
-  const [roomsLoading, setRoomsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  const { markRoomAsSeen } = useNotifications()
+
+  useEffect(() => {
+    // Mark room as seen when entering
+    markRoomAsSeen(roomId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId])
 
   useEffect(() => {
     const loadData = async () => {
@@ -35,19 +42,6 @@ export default function DMChatPage() {
         }
 
         setUser(authUser)
-
-        // Load room list for sidebar
-        try {
-          setRoomsLoading(true)
-          const roomsResponse = await fetch('/api/rooms')
-          const roomsData = await roomsResponse.json()
-          setRooms(roomsData.rooms || [])
-        } catch (roomsError) {
-          console.error('Error loading rooms list:', roomsError)
-          setRooms([])
-        } finally {
-          setRoomsLoading(false)
-        }
 
         // Fetch room details
         const { data: roomData, error: roomError } = await supabase
@@ -98,79 +92,57 @@ export default function DMChatPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
+      <ChatLayout>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </ChatLayout>
     )
   }
 
   if (error || !room || !user || !otherUser) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-destructive">{error || 'Failed to load room'}</p>
-        <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
-      </div>
+      <ChatLayout>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <p className="text-destructive">{error || 'Failed to load room'}</p>
+          <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
+        </div>
+      </ChatLayout>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push('/dashboard')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />
-            <AvatarFallback>{otherUser.username[0]?.toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-xl font-bold">{otherUser.username}</h1>
-            <p className="text-sm text-muted-foreground">Direct Message</p>
+    <ChatLayout>
+      <div className="flex flex-col h-full bg-background">
+        <header className="border-b bg-card">
+          <div className="px-4 py-3 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1"
+              onClick={() => router.push('/dashboard')}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <Avatar className="h-10 w-10 border border-border">
+              <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />
+              <AvatarFallback>{otherUser.username[0]?.toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-base font-semibold leading-none">{otherUser.username}</h1>
+              <p className="text-xs text-muted-foreground mt-1">Direct Message</p>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="flex-1 w-full max-w-7xl mx-auto">
-        <div className="h-full flex">
-          <aside className="w-full max-w-[220px] border-r bg-card/40">
-            <div className="p-4 border-b">
-              <h2 className="text-sm font-semibold text-muted-foreground">Your Rooms</h2>
-            </div>
-            <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
-              {roomsLoading ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              ) : rooms.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No rooms yet
-                </p>
-              ) : (
-                rooms.map((r) => (
-                  <RoomCard
-                    key={`${r.type}-${r.id}`}
-                    room={r}
-                    isActive={r.type === 'dm' ? r.id === roomId : false}
-                  />
-                ))
-              )}
-            </div>
-          </aside>
-
-          <section className="flex-1">
-            <ChatWindow
-              roomId={roomId}
-              roomType="dm"
-              currentUserId={user.id}
-            />
-          </section>
-        </div>
+        <section className="flex-1 min-h-0">
+          <ChatWindow
+            roomId={roomId}
+            roomType="dm"
+            currentUserId={user.id}
+          />
+        </section>
       </div>
-    </div>
+    </ChatLayout>
   )
 }

@@ -35,6 +35,8 @@ export async function GET() {
         `participant_1_id.eq.${user.id},participant_2_id.eq.${user.id}`
       )
       .order('updated_at', { ascending: false })
+      .order('created_at', { referencedTable: 'dm_messages', ascending: false })
+      .limit(1, { referencedTable: 'dm_messages' })
 
     if (dmError) throw dmError
 
@@ -67,6 +69,8 @@ export async function GET() {
           avatar_url: otherUser?.avatar_url,
           last_message: lastMessage?.content || 'No messages yet',
           last_message_time: lastMessage?.created_at || room.created_at,
+          last_message_sender_id: lastMessage?.users?.id,
+          last_message_sender_name: lastMessage?.users?.username,
           participant: otherUser,
         }
       })
@@ -94,6 +98,8 @@ export async function GET() {
       )
       .eq('club_members.user_id', user.id)
       .order('created_at', { ascending: false })
+      .order('created_at', { referencedTable: 'club_messages', ascending: false })
+      .limit(1, { referencedTable: 'club_messages' })
 
     if (clubError) {
       console.error('Error fetching clubs:', clubError)
@@ -111,6 +117,8 @@ export async function GET() {
         description: club.description,
         last_message: lastMessage?.content || 'No messages yet',
         last_message_time: lastMessage?.created_at || club.created_at,
+        last_message_sender_id: lastMessage?.users?.id,
+        last_message_sender_name: lastMessage?.users?.username,
         member_count: club.club_members?.length || 0,
       }
     })

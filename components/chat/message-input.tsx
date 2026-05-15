@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send } from 'lucide-react'
+import { Send, Loader2 } from 'lucide-react'
 
 interface MessageInputProps {
   onSend: (content: string) => Promise<void>
@@ -53,11 +53,13 @@ export function MessageInput({
   }
 
   const handleSend = async () => {
-    if (!content.trim() || isSending) return
+    const trimmed = content.trim()
+    if (!trimmed || isSending || disabled) return
 
     try {
       setIsSending(true)
-      await onSend(content.trim())
+      await onSend(trimmed)
+      // Only clear input on success
       setContent('')
       setIsTyping(false)
       if (onTyping) {
@@ -66,8 +68,12 @@ export function MessageInput({
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
+    } catch {
+      // Keep the content so user can retry
     } finally {
       setIsSending(false)
+      // Re-focus the textarea after sending
+      textareaRef.current?.focus()
     }
   }
 
@@ -86,6 +92,8 @@ export function MessageInput({
     }
   }, [])
 
+  const isDisabled = disabled || isSending
+
   return (
     <div className="flex gap-2 items-end">
       <Textarea
@@ -94,17 +102,21 @@ export function MessageInput({
         onChange={handleInput}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled || isSending}
+        disabled={isDisabled}
         className="min-h-10 max-h-30 resize-none"
         rows={1}
       />
       <Button
         onClick={handleSend}
-        disabled={!content.trim() || isSending || disabled}
+        disabled={!content.trim() || isDisabled}
         size="icon"
         className="flex-shrink-0"
       >
-        <Send className="h-4 w-4" />
+        {isSending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Send className="h-4 w-4" />
+        )}
         <span className="sr-only">Send message</span>
       </Button>
     </div>

@@ -86,115 +86,92 @@ export function Message({
   const replyCount = (message.replies || []).length
 
   return (
-    <div className={cn('flex gap-3 py-2', isOwn && 'flex-row-reverse')}>
-      <Avatar className="h-8 w-8 flex-shrink-0">
-        <AvatarImage src={message.users.avatar_url} alt={message.users.username} />
-        <AvatarFallback>{message.users.username[0]?.toUpperCase()}</AvatarFallback>
-      </Avatar>
+    <div className={cn('group flex gap-3 py-1', isOwn && 'flex-row-reverse')}>
+      {!isOwn && (
+        <Avatar className="h-8 w-8 flex-shrink-0 mt-auto mb-1">
+          <AvatarImage src={message.users.avatar_url} alt={message.users.username} />
+          <AvatarFallback>{message.users.username[0]?.toUpperCase()}</AvatarFallback>
+        </Avatar>
+      )}
 
-      <div className={cn('flex flex-col gap-1 max-w-xs', isOwn && 'items-end')}>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{message.users.username}</span>
-          <span className="text-xs text-muted-foreground">
-            {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
-          </span>
-        </div>
+      <div className={cn('flex flex-col gap-1 max-w-[75%]', isOwn && 'items-end')}>
+        {!isOwn && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs font-medium text-muted-foreground">{message.users.username}</span>
+            <span className="text-[10px] text-muted-foreground/70">
+              {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
+            </span>
+          </div>
+        )}
 
-        <div
-          className={cn(
-            'rounded-lg px-3 py-2 text-sm break-words',
-            isOwn
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground'
-          )}
-        >
-          {message.content}
+        <div className={cn("flex items-end gap-2", isOwn && "flex-row-reverse")}>
+          <div
+            className={cn(
+              'px-4 py-2.5 text-[15px] break-words shadow-sm relative',
+              isOwn
+                ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
+                : 'bg-accent/50 text-foreground rounded-2xl rounded-tl-sm'
+            )}
+          >
+            {message.content}
+          </div>
+
+          {/* Actions */}
+          <div className={cn("flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0", isOwn ? "flex-row-reverse" : "flex-row")}>
+            <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background/50 hover:bg-background shadow-sm border border-border/50 text-muted-foreground" title="React">
+                  <SmilePlus className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align={isOwn ? 'end' : 'start'} className="flex flex-row p-1 min-w-0">
+                {EMOJI_REACTIONS.map((emoji) => (
+                  <DropdownMenuItem key={emoji} onClick={() => handleEmoji(emoji)} className="px-2 py-1 cursor-pointer text-lg hover:bg-accent rounded-md">
+                    {emoji}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {isOwn && onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-background/50 hover:bg-background hover:text-destructive shadow-sm border border-border/50 text-muted-foreground"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                title="Delete"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Reactions */}
         {Object.entries(reactionGroups).length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div className={cn("flex flex-wrap gap-1 mt-0.5", isOwn ? "justify-end" : "justify-start")}>
             {Object.entries(reactionGroups).map(([emoji, userIds]) => (
               <button
                 key={emoji}
                 onClick={() => handleEmoji(emoji)}
-                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs hover:bg-muted/80 transition-colors"
+                className="inline-flex items-center gap-1 rounded-full bg-background border shadow-sm px-2 py-0.5 text-xs hover:bg-accent transition-colors"
                 title={`Reacted by: ${userIds.length} user${userIds.length > 1 ? 's' : ''}`}
               >
-                {emoji} <span className="text-xs">{userIds.length}</span>
+                <span>{emoji}</span> <span className="text-[10px] text-muted-foreground font-medium">{userIds.length}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                title="React"
-              >
-                <SmilePlus className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align={isOwn ? 'end' : 'start'}>
-              {EMOJI_REACTIONS.map((emoji) => (
-                <DropdownMenuItem key={emoji} onClick={() => handleEmoji(emoji)}>
-                  {emoji}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {onReply && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={() => onReply(message.id)}
-              title="Reply"
-            >
-              ↩️
-            </Button>
-          )}
-
-          {isOwn && onDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={handleDelete}
-              disabled={isDeleting}
-              title="Delete"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-
-          {isOwn && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleDelete} disabled={isDeleting}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
+        {isOwn && (
+          <div className="flex items-center gap-2 px-1 mt-0.5">
+            <span className="text-[10px] text-muted-foreground/70">
+              {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
+            </span>
+          </div>
+        )}
+        
         {replyCount > 0 && (
           <div className="text-xs text-primary mt-1 cursor-pointer hover:underline">
             {replyCount} {replyCount === 1 ? 'reply' : 'replies'}

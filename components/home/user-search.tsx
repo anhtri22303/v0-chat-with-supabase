@@ -34,7 +34,7 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [users, setUsers] = useState<User[]>([])
   const [searching, setSearching] = useState(false)
-  const searchTimeoutRef = useRef<NodeJS.Timeout>()
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const searchUsers = useCallback(async (query: string) => {
     if (!query || query.length < 2) {

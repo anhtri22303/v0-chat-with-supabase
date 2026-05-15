@@ -5,7 +5,9 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Users } from 'lucide-react'
+import { useNotifications } from '@/contexts/notification-context'
+import { ChatLayout } from '@/components/layout/chat-layout'
 
 export default function ClubChatPage() {
   const router = useRouter()
@@ -15,6 +17,12 @@ export default function ClubChatPage() {
   const [club, setClub] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  const { markRoomAsSeen } = useNotifications()
+
+  useEffect(() => {
+    markRoomAsSeen(clubId)
+  }, [clubId, markRoomAsSeen])
 
   useEffect(() => {
     const loadData = async () => {
@@ -56,48 +64,58 @@ export default function ClubChatPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
+      <ChatLayout>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </ChatLayout>
     )
   }
 
   if (error || !club || !user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-destructive">{error || 'Failed to load club'}</p>
-        <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
-      </div>
+      <ChatLayout>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <p className="text-destructive">{error || 'Failed to load club'}</p>
+          <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
+        </div>
+      </ChatLayout>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push('/dashboard')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{club.name}</h1>
-            {club.description && (
-              <p className="text-sm text-muted-foreground">{club.description}</p>
-            )}
+    <ChatLayout>
+      <div className="flex flex-col h-full bg-background">
+        <header className="border-b bg-card">
+          <div className="px-4 py-3 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1"
+              onClick={() => router.push('/dashboard')}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="h-10 w-10 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base font-semibold leading-none truncate">{club.name}</h1>
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                {club.description || 'Club Chat'}
+              </p>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="flex-1 max-w-7xl w-full mx-auto">
-        <ChatWindow
-          roomId={clubId}
-          roomType="club"
-          currentUserId={user.id}
-        />
+        <div className="flex-1 min-h-0">
+          <ChatWindow
+            roomId={clubId}
+            roomType="club"
+            currentUserId={user.id}
+          />
+        </div>
       </div>
-    </div>
+    </ChatLayout>
   )
 }

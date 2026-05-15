@@ -37,3 +37,6 @@ To learn more, take a look at the following resources:
 - Hydration mismatch warnings in dev can be caused by browser extensions that inject DOM attributes before React hydrates. Try Incognito or disable extensions if you see a mismatch message.
 
 <a href="https://v0.app/chat/api/kiro/clone/anhtri22303/v0-chat-with-supabase" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
+
+
+hãy đọc qua hết file này sau đó giúp tôi ở project này của tôi thì nếu user chưa mở room chat ra thì vẫn tính là 1 message mới và đang trạng thái unseen nên sẽ có thông báo toast 5 giây cũng như ở khung list các khung room chat của user đó đang có sẽ có thông báo message mới với chấm đỏ và mà khung sáng hơn bình thường, cũng hiển thị text message mới trong khoảng khung đó luôn
