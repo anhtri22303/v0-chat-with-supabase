@@ -3,26 +3,42 @@
 import { login } from '@/app/auth/actions'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function Login() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const error = searchParams.get('error_description')
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    // Check for persisted duplicate email notification
+    const duplicateEmailNotif = localStorage.getItem('duplicateEmailNotif')
+    if (duplicateEmailNotif) {
+      toast.error('This email is already registered. Please sign in instead.', {
+        duration: 4000,
+      })
+      localStorage.removeItem('duplicateEmailNotif')
+    }
+  }, [])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoginError(null)
+    setIsLoading(true)
     const formData = new FormData(e.currentTarget)
     const result = await login(formData)
 
     if (result?.error) {
       setLoginError(result.error.message || 'Login failed')
+      setIsLoading(false)
       return
     }
 
@@ -62,8 +78,15 @@ export default function Login() {
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign In'
+              )}
             </Button>
 
             <p className="text-center text-sm">

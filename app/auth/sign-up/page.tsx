@@ -8,39 +8,43 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SignUp() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
-  const [isDuplicateEmail, setIsDuplicateEmail] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    if (isDuplicateEmail) {
-      toast.error('This email is already registered. Redirecting to sign in...', {
-        duration: 3000,
+    // Check for persisted duplicate email notification
+    const duplicateEmailNotif = localStorage.getItem('duplicateEmailNotif')
+    if (duplicateEmailNotif) {
+      toast.error('This email is already registered. Please sign in instead.', {
+        duration: 4000,
       })
-      const timeout = setTimeout(() => {
-        router.push('/auth/login')
-      }, 2000)
-      return () => clearTimeout(timeout)
+      localStorage.removeItem('duplicateEmailNotif')
     }
-  }, [isDuplicateEmail, router])
+  }, [])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
-    setIsDuplicateEmail(false)
+    setIsLoading(true)
+
     const formData = new FormData(e.currentTarget)
     const result = await signUp(formData)
 
     if (result?.error) {
       const isDuplicate = (result.error as any)?.isDuplicateEmail
       if (isDuplicate) {
-        setIsDuplicateEmail(true)
-        setError(result.error.message)
+        // Persist notification across navigation
+        localStorage.setItem('duplicateEmailNotif', 'true')
+        setIsLoading(false)
+        router.push('/auth/login')
       } else {
         setError(result.error.message)
+        setIsLoading(false)
       }
       return
     }
@@ -90,8 +94,15 @@ export default function SignUp() {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <Button type="submit" className="w-full">
-              Sign Up
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                'Sign Up'
+              )}
             </Button>
 
             <p className="text-center text-sm">
