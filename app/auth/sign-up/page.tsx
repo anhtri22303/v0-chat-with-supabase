@@ -3,23 +3,45 @@
 import { signUp } from '@/app/auth/actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'
+
 export default function SignUp() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
+  const [isDuplicateEmail, setIsDuplicateEmail] = useState(false)
+
+  useEffect(() => {
+    if (isDuplicateEmail) {
+      toast.error('This email is already registered. Redirecting to sign in...', {
+        duration: 3000,
+      })
+      const timeout = setTimeout(() => {
+        router.push('/auth/login')
+      }, 2000)
+      return () => clearTimeout(timeout)
+    }
+  }, [isDuplicateEmail, router])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+    setIsDuplicateEmail(false)
     const formData = new FormData(e.currentTarget)
     const result = await signUp(formData)
 
     if (result?.error) {
-      setError(result.error.message)
+      const isDuplicate = (result.error as any)?.isDuplicateEmail
+      if (isDuplicate) {
+        setIsDuplicateEmail(true)
+        setError(result.error.message)
+      } else {
+        setError(result.error.message)
+      }
       return
     }
 
