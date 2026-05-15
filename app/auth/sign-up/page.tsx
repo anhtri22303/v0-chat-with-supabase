@@ -23,7 +23,7 @@ export default function SignUp() {
       return
     }
 
-    router.push('/auth/sign-up-success')
+    router.push('/dashboard')
   }
 
   return (
