@@ -24,6 +24,17 @@ export async function signUp(formData: FormData) {
       },
     })
 
+    // Auto-confirm user for development (Supabase issue workaround)
+    if (data.user && !error) {
+      const { error: adminError } = await supabase.auth.admin.updateUserById(data.user.id, {
+        email_confirm: true,
+      })
+      if (adminError) {
+        console.error('Auto-confirm error:', adminError)
+        // Continue anyway as the user is already created
+      }
+    }
+
     if (error) {
       return { error }
     }
@@ -61,6 +72,7 @@ export async function login(formData: FormData) {
     }
 
     revalidatePath('/', 'layout')
+    redirect('/dashboard')
   } catch (error) {
     console.error('Login error:', error)
     return { error: { message: 'An unexpected error occurred' } }
