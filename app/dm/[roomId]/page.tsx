@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChatWindow } from '@/components/chat/chat-window'
+import { RoomCard } from '@/components/home/room-card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -15,6 +16,8 @@ export default function DMChatPage() {
   const [user, setUser] = useState<any>(null)
   const [room, setRoom] = useState<any>(null)
   const [otherUser, setOtherUser] = useState<any>(null)
+  const [rooms, setRooms] = useState<any[]>([])
+  const [roomsLoading, setRoomsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,6 +35,19 @@ export default function DMChatPage() {
         }
 
         setUser(authUser)
+
+        // Load room list for sidebar
+        try {
+          setRoomsLoading(true)
+          const roomsResponse = await fetch('/api/rooms')
+          const roomsData = await roomsResponse.json()
+          setRooms(roomsData.rooms || [])
+        } catch (roomsError) {
+          console.error('Error loading rooms list:', roomsError)
+          setRooms([])
+        } finally {
+          setRoomsLoading(false)
+        }
 
         // Fetch room details
         const { data: roomData, error: roomError } = await supabase
@@ -119,12 +135,41 @@ export default function DMChatPage() {
         </div>
       </header>
 
-      <div className="flex-1 max-w-7xl w-full mx-auto">
-        <ChatWindow
-          roomId={roomId}
-          roomType="dm"
-          currentUserId={user.id}
-        />
+      <div className="flex-1 w-full max-w-7xl mx-auto">
+        <div className="h-full flex">
+          <aside className="w-full max-w-[220px] border-r bg-card/40">
+            <div className="p-4 border-b">
+              <h2 className="text-sm font-semibold text-muted-foreground">Your Rooms</h2>
+            </div>
+            <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+              {roomsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : rooms.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No rooms yet
+                </p>
+              ) : (
+                rooms.map((r) => (
+                  <RoomCard
+                    key={`${r.type}-${r.id}`}
+                    room={r}
+                    isActive={r.type === 'dm' ? r.id === roomId : false}
+                  />
+                ))
+              )}
+            </div>
+          </aside>
+
+          <section className="flex-1">
+            <ChatWindow
+              roomId={roomId}
+              roomType="dm"
+              currentUserId={user.id}
+            />
+          </section>
+        </div>
       </div>
     </div>
   )

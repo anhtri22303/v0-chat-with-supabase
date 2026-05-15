@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -19,14 +19,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { data: users, error } = await supabase
+    const adminClient = createAdminClient()
+    const { data: users, error } = await adminClient
       .from('users')
       .select('id, username, avatar_url')
       .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
       .neq('id', user.id)
       .limit(10)
 
+    console.log('[user-search] query:', query, 'resultCount:', users?.length ?? 0)
+
     if (error) {
+      console.error('[user-search] error:', error)
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 

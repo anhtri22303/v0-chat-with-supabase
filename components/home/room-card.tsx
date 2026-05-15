@@ -15,9 +15,10 @@ interface RoomCardProps {
     member_count?: number
     description?: string
   }
+  isActive?: boolean
 }
 
-export function RoomCard({ room }: RoomCardProps) {
+export function RoomCard({ room, isActive }: RoomCardProps) {
   const href = room.type === 'dm' ? `/dm/${room.id}` : `/clubs/${room.id}`
   const timeAgo = formatDistanceToNow(new Date(room.last_message_time), {
     addSuffix: true,
@@ -25,7 +26,12 @@ export function RoomCard({ room }: RoomCardProps) {
 
   return (
     <Link href={href}>
-      <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+      <Card
+        className={
+          `hover:bg-accent transition-colors cursor-pointer h-full ` +
+          (isActive ? 'border-primary/60 bg-accent/40' : '')
+        }
+      >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">

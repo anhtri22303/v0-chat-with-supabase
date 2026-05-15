@@ -139,8 +139,21 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
                     onSelect={() => handleSelectUser(user.id, user.username)}
                     className="cursor-pointer"
                   >
-                    <div className="flex flex-col">
-                      <span className="font-medium">{user.username}</span>
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{user.username}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          handleSelectUser(user.id, user.username)
+                        }}
+                      >
+                        Add
+                      </Button>
                     </div>
                   </CommandItem>
                 ))}

@@ -38,19 +38,25 @@ export async function GET() {
 
     if (dmError) throw dmError
 
+    const dmRoomsSafe = dmRooms ?? []
+
     // Get other participant info for each DM room
     const dmRoomsWithPartner = await Promise.all(
-      dmRooms.map(async (room: any) => {
+      dmRoomsSafe.map(async (room: any) => {
         const otherUserId =
           room.participant_1_id === user.id
             ? room.participant_2_id
             : room.participant_1_id
 
-        const { data: otherUser } = await supabase
+        const { data: otherUser, error: otherUserError } = await supabase
           .from('users')
           .select('id, username, avatar_url')
           .eq('id', otherUserId)
           .single()
+
+        if (otherUserError && otherUserError.code !== 'PGRST116') {
+          console.error('Error fetching DM participant:', otherUserError)
+        }
 
         const lastMessage = room.dm_messages?.[0]
 
@@ -89,9 +95,13 @@ export async function GET() {
       .eq('club_members.user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (clubError) throw clubError
+    if (clubError) {
+      console.error('Error fetching clubs:', clubError)
+    }
 
-    const clubsWithLastMessage = clubs.map((club: any) => {
+    const clubsSafe = clubError ? [] : clubs ?? []
+
+    const clubsWithLastMessage = clubsSafe.map((club: any) => {
       const lastMessage = club.club_messages?.[0]
 
       return {

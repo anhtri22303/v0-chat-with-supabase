@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (existingRoom) {
-    return NextResponse.json(existingRoom)
+    return NextResponse.json({ room: existingRoom })
   }
 
   // Create new room
@@ -122,5 +122,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data, { status: 201 })
+  return NextResponse.json({ room: data }, { status: 201 })
 }

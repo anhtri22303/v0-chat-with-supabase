@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -9,13 +9,58 @@ export async function signUp(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const username = formData.get('username') as string
+  const origin = String(formData.get('origin') ?? '')
+  const baseUrl = origin || process.env.NEXT_PUBLIC_SITE_URL || ''
+  const loginRedirect = baseUrl ? `${baseUrl}/auth/login` : undefined
+  const disableEmailInDev =
+    process.env.SUPABASE_DISABLE_EMAIL_IN_DEV === 'true' &&
+    process.env.NODE_ENV === 'development'
 
   try {
+    if (disableEmailInDev) {
+      const adminClient = createAdminClient()
+      const { data, error } = await adminClient.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password,
+        options: {
+          redirectTo: loginRedirect ??
+            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+            `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+          data: {
+            username,
+          },
+        },
+      })
+
+      if (error) {
+        if (error.message?.includes('already registered') || error.message?.includes('User already exists')) {
+          return {
+            error: {
+              message: 'This email is already registered. Please sign in instead.',
+              isDuplicateEmail: true,
+            },
+          }
+        }
+        return { error: { message: error.message ?? 'Sign up failed' } }
+      }
+
+      if (!data?.user) {
+        return { error: { message: 'Sign up failed' } }
+      }
+
+      return {
+        data,
+        usedAdminSignup: true,
+        confirmLink: data?.properties?.action_link,
+      }
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo:
+        emailRedirectTo: loginRedirect ??
           process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
           `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
         data: {
@@ -24,28 +69,16 @@ export async function signUp(formData: FormData) {
       },
     })
 
-    // Auto-confirm user for development (Supabase issue workaround)
-    if (data.user && !error) {
-      const { error: adminError } = await supabase.auth.admin.updateUserById(data.user.id, {
-        email_confirm: true,
-      })
-      if (adminError) {
-        console.error('Auto-confirm error:', adminError)
-        // Continue anyway as the user is already created
-      }
-    }
-
     if (error) {
-      // Handle duplicate email error
       if (error.message?.includes('already registered') || error.message?.includes('User already exists')) {
-        return { 
-          error: { 
+        return {
+          error: {
             message: 'This email is already registered. Please sign in instead.',
-            isDuplicateEmail: true 
-          } 
+            isDuplicateEmail: true,
+          },
         }
       }
-      return { error }
+      return { error: { message: error.message ?? 'Sign up failed' } }
     }
 
     if (!data.user) {
@@ -54,7 +87,7 @@ export async function signUp(formData: FormData) {
 
     // User profile is automatically created by database trigger
     revalidatePath('/', 'layout')
-    return { data }
+    return { data, usedAdminSignup: false }
   } catch (error) {
     console.error('Sign up error:', error)
     return { error: { message: 'An unexpected error occurred' } }
@@ -73,7 +106,7 @@ export async function login(formData: FormData) {
     })
 
     if (error) {
-      return { error }
+      return { error: { message: error.message ?? 'Login failed' } }
     }
 
     if (!data.user) {
@@ -81,7 +114,7 @@ export async function login(formData: FormData) {
     }
 
     revalidatePath('/', 'layout')
-    redirect('/dashboard')
+    return { data }
   } catch (error) {
     console.error('Login error:', error)
     return { error: { message: 'An unexpected error occurred' } }

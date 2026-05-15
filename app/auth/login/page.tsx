@@ -3,7 +3,7 @@
 import { login } from '@/app/auth/actions'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, Suspense, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-export default function Login() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const error = searchParams.get('error_description')
@@ -99,5 +99,19 @@ export default function Login() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function Login() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   )
 }

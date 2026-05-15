@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -25,7 +25,7 @@ export async function middleware(request: NextRequest) {
           })
         },
       },
-    }
+    },
   )
 
   const {
@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // If user is logged in and tries to access auth pages, redirect to dashboard
-  if (user && (request.nextUrl.pathname.startsWith('/auth/'))) {
+  if (user && request.nextUrl.pathname.startsWith('/auth/')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -51,7 +51,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.png).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.png).*)'],
 }

@@ -4,6 +4,7 @@ import { signUp } from '@/app/auth/actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useEffect, useState } from 'react'
+import emailjs from '@emailjs/browser'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,6 +34,9 @@ export default function SignUp() {
     setIsLoading(true)
 
     const formData = new FormData(e.currentTarget)
+    formData.set('origin', window.location.origin)
+    const email = String(formData.get('email') ?? '')
+    const username = String(formData.get('username') ?? '')
     const result = await signUp(formData)
 
     if (result?.error) {
@@ -49,7 +53,45 @@ export default function SignUp() {
       return
     }
 
-    router.push('/dashboard')
+    if (result?.usedAdminSignup) {
+      const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID ?? ''
+      const templateId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID ?? ''
+      const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY ?? ''
+      const confirmLink = (result as any)?.confirmLink as string | undefined
+
+      if (serviceId && templateId && publicKey && confirmLink) {
+        try {
+          await emailjs.send(
+            serviceId,
+            templateId,
+            {
+              email,
+              username,
+              confirm_url: confirmLink,
+              url: confirmLink,
+            },
+            publicKey,
+          )
+          toast.success('Confirmation email sent. Please check your inbox.')
+        } catch (sendError) {
+          console.error('EmailJS send error:', sendError)
+          setError('Failed to send confirmation email. Please try again.')
+          setIsLoading(false)
+          return
+        }
+      } else {
+        toast.error('Missing EmailJS configuration for confirmation email.')
+        setIsLoading(false)
+        return
+      }
+
+      setIsLoading(false)
+      router.push('/auth/login')
+      return
+    }
+
+    toast.success('Please check your email to confirm your account.')
+    router.push('/auth/login')
   }
 
   return (

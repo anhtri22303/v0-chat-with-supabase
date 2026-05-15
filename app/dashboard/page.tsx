@@ -71,10 +71,15 @@ export default function Dashboard() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to start conversation')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to start conversation')
       }
 
-      const { room } = await response.json()
+      const data = await response.json()
+      const room = data?.room
+      if (!room?.id) {
+        throw new Error('Invalid room response')
+      }
       toast.success(`Started conversation with ${username}`)
       await fetchRooms()
       router.push(`/dm/${room.id}`)

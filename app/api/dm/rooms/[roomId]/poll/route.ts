@@ -46,7 +46,13 @@ export async function GET(
       created_at,
       users:user_id(username, avatar_url),
       dm_message_reactions(emoji, user_id),
-      dm_message_replies(id)
+      dm_message_replies:dm_message_replies!dm_message_replies_message_id_fkey(
+        id,
+        reply_to_message_id,
+        user_id,
+        content,
+        created_at
+      )
     `
     )
     .eq('room_id', roomId)
