@@ -42,11 +42,13 @@ export async function GET(
       `
       id,
       content,
+      media_url,
+      media_type,
       user_id,
       created_at,
       users:user_id(username, avatar_url),
       club_message_reactions(emoji, user_id),
-      club_message_replies(id)
+      club_message_replies(id, reply_to_message_id)
     `
     )
     .eq('club_id', clubId)
@@ -58,6 +60,14 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Also get messages deleted since last poll
+  const { data: deletedMessages } = await supabase
+    .from('club_messages')
+    .select('id')
+    .eq('club_id', clubId)
+    .not('deleted_at', 'is', null)
+    .gt('deleted_at', after)
+
   // Also get typing indicators
   const { data: typingData } = await supabase
     .from('club_typing_indicators')
@@ -67,6 +77,7 @@ export async function GET(
 
   return NextResponse.json({
     messages: data || [],
+    deleted_ids: (deletedMessages || []).map((m: any) => m.id),
     typing: typingData || [],
     timestamp: new Date().toISOString(),
   })

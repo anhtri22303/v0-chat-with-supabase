@@ -22,12 +22,14 @@ export async function GET(request: NextRequest) {
       participant_2_id,
       created_at,
       updated_at,
-      dm_messages(id, content, user_id, created_at, order: created_at.desc, limit: 1),
+      dm_messages(id, content, user_id, created_at),
       participant1:participant_1_id(id, username, avatar_url),
       participant2:participant_2_id(id, username, avatar_url)
     `
     )
     .or(`participant_1_id.eq.${user.id},participant_2_id.eq.${user.id}`)
+    .order('created_at', { referencedTable: 'dm_messages', ascending: false })
+    .limit(1, { referencedTable: 'dm_messages' })
     .order('updated_at', { ascending: false })
 
   if (error) {

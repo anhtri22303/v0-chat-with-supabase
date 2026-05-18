@@ -1,17 +1,73 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { Message, MessageData } from './message'
 import { MessageInput } from './message-input'
-import { Spinner } from '@/components/ui/spinner'
-import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { Pin, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface ChatWindowProps {
   roomId: string
   roomType: 'club' | 'dm'
   currentUserId: string
+  highlightMessageId?: string | null
   onLoadMessages?: (messages: MessageData[]) => void
+}
+
+/** Normalize Supabase relation names to the generic names used by Message component */
+function normalizeMessage(msg: any): MessageData {
+  return {
+    ...msg,
+    reactions:
+      msg.reactions ||
+      msg.dm_message_reactions ||
+      msg.club_message_reactions ||
+      [],
+    replies:
+      msg.replies ||
+      msg.dm_message_replies ||
+      msg.club_message_replies ||
+      [],
+  }
+}
+
+function normalizeMessages(messages: any[]): MessageData[] {
+  return messages.map(normalizeMessage)
+}
+
+/**
+ * Enrich messages with reply_to data by looking up parent messages
+ * from the loaded messages list.
+ */
+function enrichWithReplyTo(messages: MessageData[]): MessageData[] {
+  const messageMap = new Map<string, MessageData>()
+  for (const msg of messages) {
+    messageMap.set(msg.id, msg)
+  }
+
+  return messages.map((msg) => {
+    // Check if this message has a reply record pointing to a parent
+    const replyRecord = msg.replies?.[0]
+    if (replyRecord && replyRecord.reply_to_message_id) {
+      const parentMsg = messageMap.get(replyRecord.reply_to_message_id)
+      if (parentMsg) {
+        return {
+          ...msg,
+          reply_to: {
+            id: parentMsg.id,
+            content: parentMsg.content,
+            user_id: parentMsg.user_id,
+            users: parentMsg.users,
+          },
+        }
+      }
+    }
+    return msg
+  })
 }
 
 /** Merge new messages into existing array, deduplicate by ID, sort by created_at */
@@ -21,23 +77,50 @@ function mergeMessages(existing: MessageData[], incoming: MessageData[]): Messag
     map.set(msg.id, msg)
   }
   for (const msg of incoming) {
-    map.set(msg.id, msg)
+    map.set(msg.id, normalizeMessage(msg))
   }
-  return Array.from(map.values()).sort(
+  const sorted = Array.from(map.values()).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
+  return enrichWithReplyTo(sorted)
+}
+
+// --- Pinned messages persistence via localStorage ---
+function getPinnedKey(roomId: string): string {
+  return `chat-pinned-${roomId}`
+}
+
+function loadPinnedIds(roomId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(getPinnedKey(roomId))
+    if (raw) {
+      return new Set(JSON.parse(raw) as string[])
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return new Set()
+}
+
+function savePinnedIds(roomId: string, ids: Set<string>): void {
+  localStorage.setItem(getPinnedKey(roomId), JSON.stringify(Array.from(ids)))
 }
 
 export function ChatWindow({
   roomId,
   roomType,
   currentUserId,
+  highlightMessageId,
   onLoadMessages,
 }: ChatWindowProps) {
+  const t = useTranslations('chatWindow')
   const [messages, setMessages] = useState<MessageData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [replyingTo, setReplyingTo] = useState<MessageData | null>(null)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
+  const [showPinnedBanner, setShowPinnedBanner] = useState(true)
   const lastPollTimeRef = useRef<string>(new Date().toISOString())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -46,20 +129,35 @@ export function ChatWindow({
 
   const apiBase = roomType === 'club' ? `/api/club/${roomId}` : `/api/dm/rooms/${roomId}`
 
+  // Load pinned IDs from localStorage on mount
+  useEffect(() => {
+    setPinnedIds(loadPinnedIds(roomId))
+  }, [roomId])
+
+  // Apply pin state to messages
+  const messagesWithPinState = messages.map((msg) => ({
+    ...msg,
+    is_pinned: pinnedIds.has(msg.id),
+  }))
+
+  // Get the pinned messages for banner display
+  const pinnedMessages = messagesWithPinState.filter((m) => m.is_pinned)
+
   // Initial load
   useEffect(() => {
     const loadInitialMessages = async () => {
       try {
         setIsLoading(true)
         const response = await fetch(`${apiBase}/messages?limit=50`)
-        if (!response.ok) throw new Error('Failed to load messages')
+        if (!response.ok) throw new Error(t('loadFailed'))
 
         const data = await response.json()
-        setMessages(data.messages)
+        const normalized = normalizeMessages(data.messages)
+        setMessages(enrichWithReplyTo(normalized))
         lastPollTimeRef.current = data.timestamp
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load messages')
+        setError(err instanceof Error ? err.message : t('loadFailed'))
       } finally {
         setIsLoading(false)
       }
@@ -95,7 +193,6 @@ export function ChatWindow({
           const newMsg = payload.new
           if (!newMsg?.id) return
 
-          // Fetch the full message with user info (realtime payload doesn't include joins)
           try {
             const response = await fetch(`${apiBase}/poll?after=${encodeURIComponent(lastPollTimeRef.current)}`)
             if (!response.ok) return
@@ -105,8 +202,31 @@ export function ChatWindow({
               setMessages((prev) => mergeMessages(prev, data.messages))
               lastPollTimeRef.current = data.timestamp
             }
+            // Remove deleted messages
+            if (data.deleted_ids && data.deleted_ids.length > 0) {
+              const deletedSet = new Set(data.deleted_ids)
+              setMessages((prev) => prev.filter((m) => !deletedSet.has(m.id)))
+            }
           } catch (err) {
             console.error('Realtime fetch error:', err)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table,
+          filter: `${filterColumn}=eq.${roomId}`,
+        },
+        (payload: any) => {
+          const updated = payload.new
+          if (!updated?.id) return
+
+          // If message was soft-deleted, remove it from the list
+          if (updated.deleted_at) {
+            setMessages((prev) => prev.filter((m) => m.id !== updated.id))
           }
         }
       )
@@ -117,7 +237,7 @@ export function ChatWindow({
     }
   }, [roomId, roomType, apiBase])
 
-  // Fallback polling every 15 seconds (in case realtime misses something)
+  // Fallback polling every 15 seconds
   useEffect(() => {
     const poll = async () => {
       try {
@@ -129,12 +249,17 @@ export function ChatWindow({
           setMessages((prev) => mergeMessages(prev, data.messages))
           lastPollTimeRef.current = data.timestamp
         }
+        // Remove deleted messages
+        if (data.deleted_ids && data.deleted_ids.length > 0) {
+          const deletedSet = new Set(data.deleted_ids)
+          setMessages((prev) => prev.filter((m) => !deletedSet.has(m.id)))
+        }
       } catch (err) {
         console.error('Polling error:', err)
       }
     }
 
-    pollingIntervalRef.current = setInterval(poll, 15000)
+    pollingIntervalRef.current = setInterval(poll, 5000)
 
     return () => {
       if (pollingIntervalRef.current) {
@@ -148,35 +273,123 @@ export function ChatWindow({
       const trimmed = content.trim()
       if (!trimmed) return
 
+      // Optimistic: show message instantly
+      const tempId = `temp-${Date.now()}`
+      const optimisticMsg: MessageData = {
+        id: tempId,
+        content: trimmed,
+        user_id: currentUserId,
+        created_at: new Date().toISOString(),
+        users: { username: t('you') },
+        reactions: [],
+        replies: [],
+        reply_to: replyingTo ? {
+          id: replyingTo.id,
+          content: replyingTo.content,
+          user_id: replyingTo.user_id,
+          users: replyingTo.users,
+        } : null,
+      }
+
+      setMessages((prev) => [...prev, optimisticMsg])
+      setShouldAutoScroll(true)
+      setReplyingTo(null)
+      setError(null)
+
       try {
-        setIsSending(true)
-        setError(null)
+        const body: Record<string, string> = { content: trimmed }
+        if (replyingTo) {
+          body.replyToMessageId = replyingTo.id
+        }
 
         const response = await fetch(`${apiBase}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: trimmed }),
+          body: JSON.stringify(body),
         })
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || 'Failed to send message')
+          throw new Error(errorData.error || t('sendFailed'))
         }
 
         const newMessage = await response.json()
-        // Use mergeMessages to prevent duplicates if polling already picked it up
-        setMessages((prev) => mergeMessages(prev, [newMessage]))
-        // Advance poll time so polling won't re-fetch this message
+        // Replace optimistic message with real one
+        setMessages((prev) =>
+          mergeMessages(
+            prev.filter((m) => m.id !== tempId),
+            [normalizeMessage(newMessage)]
+          )
+        )
+        lastPollTimeRef.current = new Date().toISOString()
+      } catch (err) {
+        // Remove optimistic message on failure
+        setMessages((prev) => prev.filter((m) => m.id !== tempId))
+        setError(err instanceof Error ? err.message : t('sendFailed'))
+        throw err
+      }
+    },
+    [apiBase, replyingTo, currentUserId, t]
+  )
+
+  const handleSendMedia = useCallback(
+    async (file: File, mediaType: 'image' | 'video', caption?: string) => {
+      try {
+        setIsSending(true)
+        setError(null)
+
+        // 1. Upload file to Supabase Storage
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('roomId', roomId)
+        formData.append('roomType', roomType)
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}))
+          throw new Error(errorData.error || t('sendMediaFailed'))
+        }
+
+        const uploadData = await uploadResponse.json()
+
+        // 2. Send message with media URL
+        const body: Record<string, string> = {
+          content: caption || '',
+          mediaUrl: uploadData.url,
+          mediaType: uploadData.mediaType,
+        }
+        if (replyingTo) {
+          body.replyToMessageId = replyingTo.id
+        }
+
+        const response = await fetch(`${apiBase}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || t('sendFailed'))
+        }
+
+        const newMessage = await response.json()
+        setMessages((prev) => mergeMessages(prev, [normalizeMessage(newMessage)]))
         lastPollTimeRef.current = new Date().toISOString()
         setShouldAutoScroll(true)
+        setReplyingTo(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to send message')
-        throw err // Re-throw so MessageInput knows it failed
+        setError(err instanceof Error ? err.message : t('sendMediaFailed'))
+        throw err
       } finally {
         setIsSending(false)
       }
     },
-    [apiBase]
+    [apiBase, roomId, roomType, replyingTo, t]
   )
 
   const handleDeleteMessage = useCallback(
@@ -186,14 +399,21 @@ export function ChatWindow({
           method: 'DELETE',
         })
 
-        if (!response.ok) throw new Error('Failed to delete message')
+        if (!response.ok) throw new Error(t('deleteFailed'))
 
         setMessages((prev) => prev.filter((m) => m.id !== messageId))
+        // Also remove from pinned if it was pinned
+        setPinnedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(messageId)
+          savePinnedIds(roomId, next)
+          return next
+        })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete message')
+        setError(err instanceof Error ? err.message : t('deleteFailed'))
       }
     },
-    [apiBase]
+    [apiBase, roomId, t]
   )
 
   const handleReact = useCallback(
@@ -207,11 +427,11 @@ export function ChatWindow({
 
         if (!response.ok) throw new Error('Failed to add reaction')
 
-        // Refetch messages to get updated reactions
         const messagesResponse = await fetch(`${apiBase}/messages?limit=50`)
         if (messagesResponse.ok) {
           const data = await messagesResponse.json()
-          setMessages(data.messages)
+          const normalized = normalizeMessages(data.messages)
+          setMessages(enrichWithReplyTo(normalized))
         }
       } catch (err) {
         console.error('Reaction error:', err)
@@ -219,6 +439,49 @@ export function ChatWindow({
     },
     [apiBase]
   )
+
+  const handleReply = useCallback((message: MessageData) => {
+    setReplyingTo(message)
+  }, [])
+
+  const handleCancelReply = useCallback(() => {
+    setReplyingTo(null)
+  }, [])
+
+  const handlePin = useCallback((message: MessageData) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev)
+      next.add(message.id)
+      savePinnedIds(roomId, next)
+      return next
+    })
+    setShowPinnedBanner(true)
+  }, [roomId])
+
+  const handleUnpin = useCallback((messageId: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(messageId)
+      savePinnedIds(roomId, next)
+      return next
+    })
+  }, [roomId])
+
+  const scrollToMessage = useCallback((messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('animate-pin-highlight')
+      setTimeout(() => el.classList.remove('animate-pin-highlight'), 2000)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (highlightMessageId && !isLoading && messages.length > 0) {
+      const timer = setTimeout(() => scrollToMessage(highlightMessageId), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [highlightMessageId, isLoading, messages.length, scrollToMessage])
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const element = e.currentTarget
@@ -228,8 +491,36 @@ export function ChatWindow({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
+      <div className="flex flex-col h-full bg-accent/10">
+        <div className="flex-1 overflow-hidden p-4 md:px-8 lg:px-16 space-y-4">
+          {/* Skeleton messages - alternating left/right */}
+          {[false, false, true, false, true, true, false].map((isOwn, i) => (
+            <div key={i} className={cn('flex gap-3', isOwn && 'flex-row-reverse')}>
+              {!isOwn && (
+                <Skeleton className="h-8 w-8 rounded-full flex-shrink-0 mt-auto mb-1" />
+              )}
+              <div className={cn('flex flex-col gap-1.5 max-w-[60%]', isOwn && 'items-end')}>
+                {!isOwn && <Skeleton className="h-3 w-16" />}
+                <Skeleton
+                  className={cn(
+                    'h-10 rounded-2xl',
+                    isOwn ? 'rounded-tr-sm' : 'rounded-tl-sm',
+                    i % 3 === 0 ? 'w-48' : i % 3 === 1 ? 'w-64' : 'w-36'
+                  )}
+                />
+                {isOwn && <Skeleton className="h-2.5 w-12" />}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="border-t p-3 md:p-4 bg-background">
+          <div className="flex gap-2 items-end">
+            <Skeleton className="h-10 w-10 rounded-md" />
+            <Skeleton className="h-10 flex-1 rounded-md" />
+            <Skeleton className="h-10 w-10 rounded-md" />
+            <Skeleton className="h-10 w-10 rounded-md" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -242,23 +533,67 @@ export function ChatWindow({
         </div>
       )}
 
+      {/* Pinned messages banner */}
+      {pinnedMessages.length > 0 && showPinnedBanner && (
+        <div className="border-b bg-amber-500/5 dark:bg-amber-500/10">
+          <div className="flex items-center gap-2 px-4 py-2 md:px-8 lg:px-16">
+            <Pin className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                {t('pinnedCount', { count: pinnedMessages.length })}
+              </p>
+              <button
+                onClick={() => scrollToMessage(pinnedMessages[pinnedMessages.length - 1].id)}
+                className="text-xs text-muted-foreground hover:text-foreground truncate block max-w-full text-left transition-colors"
+              >
+                {pinnedMessages[pinnedMessages.length - 1].users.username}: {pinnedMessages[pinnedMessages.length - 1].content}
+              </button>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowPinnedBanner(false)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Collapsed pinned indicator (when banner is hidden) */}
+      {pinnedMessages.length > 0 && !showPinnedBanner && (
+        <button
+          onClick={() => setShowPinnedBanner(true)}
+          className="flex items-center gap-1.5 px-4 py-1.5 md:px-8 lg:px-16 border-b text-xs text-amber-500 hover:bg-amber-500/5 transition-colors"
+        >
+          <Pin className="h-3 w-3" />
+          <span>{t('pinnedCollapsed', { count: pinnedMessages.length })}</span>
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      )}
+
       <div
         ref={containerRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto space-y-1 p-4 md:px-8 lg:px-16"
       >
-        {messages.length === 0 ? (
+        {messagesWithPinState.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            No messages yet. Start a conversation!
+            {t('noMessages')}
           </div>
         ) : (
-          messages.map((message) => (
-            <div key={message.id}>
+          messagesWithPinState.map((message) => (
+            <div key={message.id} id={`msg-${message.id}`}>
               <Message
                 message={message}
                 isOwn={message.user_id === currentUserId}
+                currentUserId={currentUserId}
                 onDelete={handleDeleteMessage}
                 onReact={handleReact}
+                onReply={handleReply}
+                onPin={handlePin}
+                onUnpin={handleUnpin}
               />
             </div>
           ))
@@ -269,8 +604,15 @@ export function ChatWindow({
       <div className="border-t p-3 md:p-4 bg-background">
         <MessageInput
           onSend={handleSendMessage}
-          disabled={isSending}
-          placeholder="Type a message... (Shift+Enter for new line)"
+          onSendMedia={handleSendMedia}
+          disabled={false}
+          placeholder={t('placeholder')}
+          replyingTo={replyingTo ? {
+            id: replyingTo.id,
+            content: replyingTo.content,
+            username: replyingTo.users.username,
+          } : null}
+          onCancelReply={handleCancelReply}
         />
       </div>
     </div>

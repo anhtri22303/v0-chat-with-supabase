@@ -1,32 +1,38 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChatWindow } from '@/components/chat/chat-window'
+import { ChatHeader } from '@/components/chat/chat-header'
+import { ChatDetailsPanel } from '@/components/chat/chat-details-panel'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2 } from 'lucide-react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useNotifications } from '@/contexts/notification-context'
 import { ChatLayout } from '@/components/layout/chat-layout'
+import { useIsLargeScreen } from '@/hooks/use-media-query'
+import { useCall } from '@/contexts/call-context'
 
 export default function DMChatPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const roomId = params.roomId as string
+  const highlightMessageId = searchParams.get('msg')
   const [user, setUser] = useState<any>(null)
   const [room, setRoom] = useState<any>(null)
   const [otherUser, setOtherUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
-  const { markRoomAsSeen } = useNotifications()
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const isLargeScreen = useIsLargeScreen()
+
+  const { markRoomAsSeen, rooms } = useNotifications()
+  const { startCall } = useCall()
 
   useEffect(() => {
-    // Mark room as seen when entering
     markRoomAsSeen(roomId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId])
+  }, [roomId, markRoomAsSeen])
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,7 +49,6 @@ export default function DMChatPage() {
 
         setUser(authUser)
 
-        // Fetch room details
         const { data: roomData, error: roomError } = await supabase
           .from('dm_rooms')
           .select(
@@ -63,7 +68,6 @@ export default function DMChatPage() {
           return
         }
 
-        // Check if user is a participant
         if (
           roomData.participant_1_id !== authUser.id &&
           roomData.participant_2_id !== authUser.id
@@ -74,7 +78,6 @@ export default function DMChatPage() {
 
         setRoom(roomData)
 
-        // Determine other user
         const other =
           roomData.participant_1_id === authUser.id
             ? roomData.participant2
@@ -90,11 +93,46 @@ export default function DMChatPage() {
     loadData()
   }, [roomId, router])
 
+  const handleInfoClick = useCallback(() => {
+    if (isLargeScreen) {
+      setDetailsOpen((v) => !v)
+    } else {
+      router.push(`/dm/${roomId}/details`)
+    }
+  }, [isLargeScreen, router, roomId])
+
+  const handleSearchSelect = useCallback(
+    (messageId: string) => {
+      setDetailsOpen(false)
+      router.replace(`/dm/${roomId}?msg=${messageId}`)
+    },
+    [router, roomId]
+  )
+
+  const dmRoomsForGroup = rooms
+    .filter((r) => r.type === 'dm' && r.participant)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      participant: r.participant!,
+    }))
+
   if (loading) {
     return (
       <ChatLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex flex-col h-full bg-background">
+          <header className="border-b bg-card">
+            <div className="px-4 py-3 flex items-center gap-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+          </header>
+          <section className="flex-1 min-h-0">
+            <ChatWindow roomId={roomId} roomType="dm" currentUserId="" />
+          </section>
         </div>
       </ChatLayout>
     )
@@ -113,35 +151,41 @@ export default function DMChatPage() {
 
   return (
     <ChatLayout>
-      <div className="flex flex-col h-full bg-background">
-        <header className="border-b bg-card">
-          <div className="px-4 py-3 flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden mr-1"
-              onClick={() => router.push('/dashboard')}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <Avatar className="h-10 w-10 border border-border">
-              <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />
-              <AvatarFallback>{otherUser.username[0]?.toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div>
-              <h1 className="text-base font-semibold leading-none">{otherUser.username}</h1>
-              <p className="text-xs text-muted-foreground mt-1">Direct Message</p>
-            </div>
-          </div>
-        </header>
-
-        <section className="flex-1 min-h-0">
-          <ChatWindow
-            roomId={roomId}
-            roomType="dm"
-            currentUserId={user.id}
+      <div className="flex h-full min-w-0 bg-background">
+        <div className="flex flex-col flex-1 min-w-0">
+          <ChatHeader
+            title={otherUser.username}
+            subtitle="Direct Message"
+            avatarUrl={otherUser.avatar_url}
+            showBack
+            onBack={() => router.push('/dashboard')}
+            onInfoClick={handleInfoClick}
+            onVoiceCall={() => startCall({ roomType: 'dm', roomId, callType: 'audio' })}
+            onVideoCall={() => startCall({ roomType: 'dm', roomId, callType: 'video' })}
           />
-        </section>
+          <section className="flex-1 min-h-0">
+            <ChatWindow
+              roomId={roomId}
+              roomType="dm"
+              currentUserId={user.id}
+              highlightMessageId={highlightMessageId}
+            />
+          </section>
+        </div>
+        {detailsOpen && isLargeScreen && (
+          <ChatDetailsPanel
+            roomType="dm"
+            roomId={roomId}
+            displayName={otherUser.username}
+            subtitle="Direct Message"
+            avatarUrl={otherUser.avatar_url}
+            otherUserId={otherUser.id}
+            otherUsername={otherUser.username}
+            dmRoomsForGroup={dmRoomsForGroup}
+            onSearchSelect={handleSearchSelect}
+            onClose={() => setDetailsOpen(false)}
+          />
+        )}
       </div>
     </ChatLayout>
   )

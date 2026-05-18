@@ -2,9 +2,10 @@
 
 import { formatDistanceToNowStrict } from 'date-fns'
 import Link from 'next/link'
-import { MessageCircle, Users } from 'lucide-react'
+import { MessageCircle, Users, Camera, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useLocale } from 'next-intl'
 
 interface RoomCardProps {
   room: {
@@ -22,7 +23,8 @@ interface RoomCardProps {
 }
 
 export function RoomCard({ room, isActive, isUnseen }: RoomCardProps) {
-  const href = room.type === 'dm' ? `/dm/${room.id}` : `/clubs/${room.id}`
+  const locale = useLocale()
+  const href = room.type === 'dm' ? `/${locale}/dm/${room.id}` : `/${locale}/clubs/${room.id}`
   const timeAgo = formatDistanceToNowStrict(new Date(room.last_message_time))
 
   return (
@@ -73,10 +75,16 @@ export function RoomCard({ room, isActive, isUnseen }: RoomCardProps) {
 
           <div className="flex items-center gap-2">
             <p className={cn(
-              "text-[13px] truncate",
+              "text-[13px] truncate flex items-center gap-1",
               isUnseen ? "font-semibold text-foreground" : "text-muted-foreground"
             )}>
-              {room.last_message}
+              {(room.last_message.startsWith('Sent a photo') || room.last_message.startsWith('[Photo]')) && (
+                <Camera className="h-3.5 w-3.5 flex-shrink-0 text-sky-400" />
+              )}
+              {(room.last_message.startsWith('Sent a video') || room.last_message.startsWith('[Video]')) && (
+                <Video className="h-3.5 w-3.5 flex-shrink-0 text-sky-400" />
+              )}
+              <span className="truncate">{room.last_message}</span>
             </p>
             {isUnseen && (
               <div className="relative flex-shrink-0 ml-auto">

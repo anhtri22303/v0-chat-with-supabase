@@ -2,10 +2,24 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { logOut } from '@/app/auth/actions'
-import { Loader2, LogOut, MessageSquarePlus } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Loader2, LogOut, MessageSquarePlus, Settings } from 'lucide-react'
 import { UserSearch } from '@/components/home/user-search'
 import { CreateGroupModal } from '@/components/home/create-group-modal'
 import { RoomCard } from '@/components/home/room-card'
@@ -16,9 +30,25 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function GlobalSidebar() {
   const router = useRouter()
+  const pathname = usePathname()
+  const t = useTranslations('dashboard')
+  const tSidebar = useTranslations('sidebar')
+  const tToasts = useTranslations('toasts')
+  const locale = useLocale()
   const [user, setUser] = useState<any>(null)
   const [creatingDm, setCreatingDm] = useState(false)
   const { rooms, unseenRoomIds, refreshRooms } = useNotifications()
+
+  const switchLocale = (nextLocale: string) => {
+    if (nextLocale === locale) return
+    const segments = pathname.split('/')
+    if (segments[1] === 'en' || segments[1] === 'vi') {
+      segments[1] = nextLocale
+    } else {
+      segments.splice(1, 0, nextLocale)
+    }
+    router.push(segments.join('/'))
+  }
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -28,7 +58,7 @@ export function GlobalSidebar() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push('/auth/login')
+        router.push(`/${locale}/auth/login`)
         return
       }
 
@@ -56,12 +86,12 @@ export function GlobalSidebar() {
       if (!room?.id) {
         throw new Error('Invalid room response')
       }
-      toast.success(`Started conversation with ${username}`)
+      toast.success(tToasts('startConversation', { name: username }))
       await refreshRooms()
-      router.push(`/dm/${room.id}`)
+      router.push(`/${locale}/dm/${room.id}`)
     } catch (error) {
       console.error('Error starting DM:', error)
-      toast.error('Failed to start conversation')
+      toast.error(tToasts('startConversationFailed'))
     } finally {
       setCreatingDm(false)
     }
@@ -79,6 +109,32 @@ export function GlobalSidebar() {
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem>{t('settings')}</DropdownMenuItem>
+              <DropdownMenuItem>{t('pendingMessages')}</DropdownMenuItem>
+              <DropdownMenuItem>{t('archivedChats')}</DropdownMenuItem>
+              <DropdownMenuItem>{t('restrictedAccount')}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>{t('privacySafety')}</DropdownMenuItem>
+              <DropdownMenuItem>{t('help')}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{t('language')}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup value={locale} onValueChange={switchLocale}>
+                    <DropdownMenuRadioItem value="en">{t('english')}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="vi">{t('vietnamese')}</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <form action={logOut}>
             <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
               <LogOut className="h-4 w-4" />
@@ -101,7 +157,7 @@ export function GlobalSidebar() {
         <div className="p-2 space-y-1">
           {rooms.length === 0 ? (
             <div className="text-center p-4 mt-8">
-              <p className="text-sm text-muted-foreground">No conversations yet.</p>
+              <p className="text-sm text-muted-foreground">{tSidebar('noConversations')}</p>
             </div>
           ) : (
             rooms.map((room) => (

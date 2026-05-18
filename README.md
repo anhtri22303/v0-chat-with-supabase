@@ -39,4 +39,39 @@ To learn more, take a look at the following resources:
 <a href="https://v0.app/chat/api/kiro/clone/anhtri22303/v0-chat-with-supabase" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
 
 
-hãy đọc qua hết file này sau đó giúp tôi ở project này của tôi thì nếu user chưa mở room chat ra thì vẫn tính là 1 message mới và đang trạng thái unseen nên sẽ có thông báo toast 5 giây cũng như ở khung list các khung room chat của user đó đang có sẽ có thông báo message mới với chấm đỏ và mà khung sáng hơn bình thường, cũng hiển thị text message mới trong khoảng khung đó luôn
+giúp tôi xem qua và check lại toàn bộ codebase sau đó thì theo bên dưới là tôi đã thêm các chức năng này:
+Backend
+
+lib/livekit.ts — tạo JWT, xóa phòng LiveKit
+lib/call-auth.ts, lib/call-types.ts
+API: /api/calls/start, join, decline, end, active
+Migration: supabase/migrations/20260518000000_call_sessions.sql
+Frontend
+
+contexts/call-context.tsx — signaling Realtime, incoming call, overlay
+components/call/ — incoming-call-dialog, call-overlay, livekit-room-view
+Nút Phone / Video trên chat-header.tsx (DM + Club)
+Club: badge “Tham gia cuộc gọi” khi có cuộc gọi đang active
+Gọi từ trang details (mobile): quick actions Gọi thoại / Gọi video
+Packages: livekit-server-sdk, livekit-client, @livekit/components-react, @livekit/components-styles
+
+Luồng sử dụng
+Loại	Hành vi
+DM
+Gọi → đối phương thấy dialog → Accept → overlay video/audio
+Club
+Member start → các member khác được mời → có thể Tham gia cuộc gọi
+Từ chối
+Callee decline → caller nhận toast
+Kết thúc
+Nút đỏ trên overlay → gọi API end + đóng phòng LiveKit
+
+ POST /api/calls/start 500 in 1894ms (next.js: 87ms, proxy.ts: 303ms, application-code: 1504ms)
+Error fetching clubs: {
+  code: '42P17',
+  details: null,
+  hint: null,
+  message: 'infinite recursion detected in policy for relation "club_members"'
+}
+
+khi tôi nhấn 1 trong 2 nút call và video call thì lỗi như hình, hãy giúp tôi fix nó

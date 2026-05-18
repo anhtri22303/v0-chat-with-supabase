@@ -37,16 +37,16 @@ export async function signUp(formData: FormData) {
         if (error.message?.includes('already registered') || error.message?.includes('User already exists')) {
           return {
             error: {
-              message: 'This email is already registered. Please sign in instead.',
+              message: 'duplicateEmail',
               isDuplicateEmail: true,
             },
           }
         }
-        return { error: { message: error.message ?? 'Sign up failed' } }
+        return { error: { message: error.message ?? 'signUpFailed' } }
       }
 
       if (!data?.user) {
-        return { error: { message: 'Sign up failed' } }
+        return { error: { message: 'signUpFailed' } }
       }
 
       return {
@@ -73,16 +73,16 @@ export async function signUp(formData: FormData) {
       if (error.message?.includes('already registered') || error.message?.includes('User already exists')) {
         return {
           error: {
-            message: 'This email is already registered. Please sign in instead.',
+            message: 'duplicateEmail',
             isDuplicateEmail: true,
           },
         }
       }
-      return { error: { message: error.message ?? 'Sign up failed' } }
+      return { error: { message: error.message ?? 'signUpFailed' } }
     }
 
     if (!data.user) {
-      return { error: { message: 'Sign up failed' } }
+      return { error: { message: 'signUpFailed' } }
     }
 
     // User profile is automatically created by database trigger
@@ -90,7 +90,7 @@ export async function signUp(formData: FormData) {
     return { data, usedAdminSignup: false }
   } catch (error) {
     console.error('Sign up error:', error)
-    return { error: { message: 'An unexpected error occurred' } }
+    return { error: { message: 'unexpectedError' } }
   }
 }
 
@@ -106,18 +106,18 @@ export async function login(formData: FormData) {
     })
 
     if (error) {
-      return { error: { message: error.message ?? 'Login failed' } }
+      return { error: { message: error.message ?? 'loginFailed' } }
     }
 
     if (!data.user) {
-      return { error: { message: 'Login failed' } }
+      return { error: { message: 'loginFailed' } }
     }
 
     revalidatePath('/', 'layout')
     return { data }
   } catch (error) {
     console.error('Login error:', error)
-    return { error: { message: 'An unexpected error occurred' } }
+    return { error: { message: 'unexpectedError' } }
   }
 }
 
@@ -125,5 +125,5 @@ export async function logOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()
   revalidatePath('/', 'layout')
-  redirect('/auth/login')
+  redirect('/vi/auth/login')
 }

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useEffect, useState } from 'react'
 import emailjs from '@emailjs/browser'
+import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,6 +15,8 @@ import { toast } from 'sonner'
 
 export default function SignUp() {
   const router = useRouter()
+  const locale = useLocale()
+  const t = useTranslations('auth')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -21,12 +24,12 @@ export default function SignUp() {
     // Check for persisted duplicate email notification
     const duplicateEmailNotif = localStorage.getItem('duplicateEmailNotif')
     if (duplicateEmailNotif) {
-      toast.error('This email is already registered. Please sign in instead.', {
+      toast.error(t('duplicateEmail'), {
         duration: 4000,
       })
       localStorage.removeItem('duplicateEmailNotif')
     }
-  }, [])
+  }, [t])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -45,9 +48,10 @@ export default function SignUp() {
         // Persist notification across navigation
         localStorage.setItem('duplicateEmailNotif', 'true')
         setIsLoading(false)
-        router.push('/auth/login')
+        router.push(`/${locale}/auth/login`)
       } else {
-        setError(result.error.message)
+        const messageKey = result.error.message as string
+        setError(t(messageKey, { default: t('signUpFailed') }))
         setIsLoading(false)
       }
       return
@@ -72,64 +76,64 @@ export default function SignUp() {
             },
             publicKey,
           )
-          toast.success('Confirmation email sent. Please check your inbox.')
+          toast.success(t('confirmEmailSent'))
         } catch (sendError) {
           console.error('EmailJS send error:', sendError)
-          setError('Failed to send confirmation email. Please try again.')
+          setError(t('confirmEmailError'))
           setIsLoading(false)
           return
         }
       } else {
-        toast.error('Missing EmailJS configuration for confirmation email.')
+        toast.error(t('confirmEmailMissingConfig'))
         setIsLoading(false)
         return
       }
 
       setIsLoading(false)
-      router.push('/auth/login')
+      router.push(`/${locale}/auth/login`)
       return
     }
 
-    toast.success('Please check your email to confirm your account.')
-    router.push('/auth/login')
+    toast.success(t('checkEmailConfirm'))
+    router.push(`/${locale}/auth/login`)
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Create Account</CardTitle>
+          <CardTitle className="text-2xl">{t('createAccount')}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('email')}</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder={t('emailPlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t('username')}</Label>
               <Input
                 id="username"
                 name="username"
-                placeholder="Your name"
+                placeholder={t('usernamePlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('password')}</Label>
               <Input
                 id="password"
                 type="password"
                 name="password"
-                placeholder="••••••••"
+                placeholder={t('passwordPlaceholder')}
                 required
               />
             </div>
@@ -140,17 +144,17 @@ export default function SignUp() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating account...
+                  {t('signUpLoading')}
                 </>
               ) : (
-                'Sign Up'
+                t('signUp')
               )}
             </Button>
 
             <p className="text-center text-sm">
-              Already have an account?{' '}
-              <Link href="/auth/login" className="text-primary hover:underline">
-                Log in
+              {t('haveAccount')}{' '}
+              <Link href={`/${locale}/auth/login`} className="text-primary hover:underline">
+                {t('loginLink')}
               </Link>
             </p>
           </form>

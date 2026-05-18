@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   try {
-    // Fetch DM rooms
+    // Fetch DM rooms (without messages - we'll query them separately)
     const { data: dmRooms, error: dmError } = await supabase
       .from('dm_rooms')
       .select(
@@ -22,27 +22,19 @@ export async function GET() {
         participant_1_id,
         participant_2_id,
         created_at,
-        updated_at,
-        dm_messages (
-          id,
-          content,
-          created_at,
-          users:user_id (id, username, avatar_url)
-        )
+        updated_at
       `
       )
       .or(
         `participant_1_id.eq.${user.id},participant_2_id.eq.${user.id}`
       )
       .order('updated_at', { ascending: false })
-      .order('created_at', { referencedTable: 'dm_messages', ascending: false })
-      .limit(1, { referencedTable: 'dm_messages' })
 
     if (dmError) throw dmError
 
     const dmRoomsSafe = dmRooms ?? []
 
-    // Get other participant info for each DM room
+    // Get other participant info + last message from OTHER user for each DM room
     const dmRoomsWithPartner = await Promise.all(
       dmRoomsSafe.map(async (room: any) => {
         const otherUserId =
@@ -60,17 +52,42 @@ export async function GET() {
           console.error('Error fetching DM participant:', otherUserError)
         }
 
-        const lastMessage = room.dm_messages?.[0]
+        // Fetch last message from anyone, excluding deleted
+        const { data: lastMessages } = await supabase
+          .from('dm_messages')
+          .select('id, content, media_url, media_type, created_at, user_id, users:user_id(id, username)')
+          .eq('room_id', room.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        const lastMessage = lastMessages?.[0]
+        const isOwnMessage = lastMessage?.user_id === user.id
+
+        // Helper to format preview text
+        let previewText = lastMessage
+          ? (lastMessage.media_type === 'image'
+              ? (lastMessage.content ? `[Photo] ${lastMessage.content}` : 'Sent a photo')
+              : lastMessage.media_type === 'video'
+                ? (lastMessage.content ? `[Video] ${lastMessage.content}` : 'Sent a video')
+                : lastMessage.content || 'No messages yet')
+          : 'No messages yet'
+
+        if (isOwnMessage && lastMessage) {
+          previewText = `You: ${previewText}`
+        }
+
+        const sender = Array.isArray(lastMessage?.users) ? lastMessage?.users?.[0] : lastMessage?.users
 
         return {
           type: 'dm' as const,
           id: room.id,
           name: otherUser?.username || 'Unknown',
           avatar_url: otherUser?.avatar_url,
-          last_message: lastMessage?.content || 'No messages yet',
+          last_message: previewText,
           last_message_time: lastMessage?.created_at || room.created_at,
-          last_message_sender_id: lastMessage?.users?.id,
-          last_message_sender_name: lastMessage?.users?.username,
+          last_message_sender_id: sender?.id,
+          last_message_sender_name: sender?.username,
           participant: otherUser,
         }
       })
@@ -87,19 +104,11 @@ export async function GET() {
         created_at,
         club_members!inner (
           user_id
-        ),
-        club_messages (
-          id,
-          content,
-          created_at,
-          users:user_id (id, username)
         )
       `
       )
       .eq('club_members.user_id', user.id)
       .order('created_at', { ascending: false })
-      .order('created_at', { referencedTable: 'club_messages', ascending: false })
-      .limit(1, { referencedTable: 'club_messages' })
 
     if (clubError) {
       console.error('Error fetching clubs:', clubError)
@@ -107,21 +116,47 @@ export async function GET() {
 
     const clubsSafe = clubError ? [] : clubs ?? []
 
-    const clubsWithLastMessage = clubsSafe.map((club: any) => {
-      const lastMessage = club.club_messages?.[0]
+    const clubsWithLastMessage = await Promise.all(
+      clubsSafe.map(async (club: any) => {
+        // Fetch last message from anyone, excluding deleted
+        const { data: lastMessages } = await supabase
+          .from('club_messages')
+          .select('id, content, media_url, media_type, created_at, user_id, users:user_id(id, username)')
+          .eq('club_id', club.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
 
-      return {
-        type: 'group' as const,
-        id: club.id,
-        name: club.name,
-        description: club.description,
-        last_message: lastMessage?.content || 'No messages yet',
-        last_message_time: lastMessage?.created_at || club.created_at,
-        last_message_sender_id: lastMessage?.users?.id,
-        last_message_sender_name: lastMessage?.users?.username,
-        member_count: club.club_members?.length || 0,
-      }
-    })
+        const lastMessage = lastMessages?.[0]
+        const isOwnMessage = lastMessage?.user_id === user.id
+
+        let previewText = lastMessage
+          ? (lastMessage.media_type === 'image'
+              ? (lastMessage.content ? `[Photo] ${lastMessage.content}` : 'Sent a photo')
+              : lastMessage.media_type === 'video'
+                ? (lastMessage.content ? `[Video] ${lastMessage.content}` : 'Sent a video')
+                : lastMessage.content || 'No messages yet')
+          : 'No messages yet'
+
+        if (isOwnMessage && lastMessage) {
+          previewText = `You: ${previewText}`
+        }
+
+        const clubSender = Array.isArray(lastMessage?.users) ? lastMessage?.users?.[0] : lastMessage?.users
+
+        return {
+          type: 'group' as const,
+          id: club.id,
+          name: club.name,
+          description: club.description,
+          last_message: previewText,
+          last_message_time: lastMessage?.created_at || club.created_at,
+          last_message_sender_id: clubSender?.id,
+          last_message_sender_name: clubSender?.username,
+          member_count: club.club_members?.length || 0,
+        }
+      })
+    )
 
     // Combine and sort by last message time
     const allRooms = [...dmRoomsWithPartner, ...clubsWithLastMessage].sort(

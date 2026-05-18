@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ interface UserSearchProps {
 }
 
 export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
+  const t = useTranslations('userSearch')
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [users, setUsers] = useState<User[]>([])
@@ -89,7 +91,7 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
       <PopoverTrigger asChild>
         <Button variant="outline" className="w-full justify-start gap-2">
           <Search className="h-4 w-4" />
-          <span>Start a conversation...</span>
+          <span>{t('startConversation')}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
@@ -97,7 +99,7 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
           <div className="flex items-center gap-2 px-3 py-2 border-b">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by username or email..."
+              placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="border-0 outline-0 ring-0 focus-visible:ring-0 focus-visible:outline-0"
@@ -121,13 +123,11 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
             )}
 
             {!searching && users.length === 0 && searchQuery && (
-              <CommandEmpty>No users found</CommandEmpty>
+              <CommandEmpty>{t('noUsers')}</CommandEmpty>
             )}
 
             {!searching && users.length === 0 && !searchQuery && (
-              <CommandEmpty>
-                Start typing to search for users...
-              </CommandEmpty>
+              <CommandEmpty>{t('startTyping')}</CommandEmpty>
             )}
 
             {!searching && users.length > 0 && (
@@ -152,7 +152,7 @@ export function UserSearch({ onUserSelected, isLoading }: UserSearchProps) {
                           handleSelectUser(user.id, user.username)
                         }}
                       >
-                        Add
+                        {t('add')}
                       </Button>
                     </div>
                   </CommandItem>

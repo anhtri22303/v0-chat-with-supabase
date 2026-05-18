@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,15 +31,38 @@ interface DMRoom {
 interface CreateGroupModalProps {
   dmRooms: DMRoom[]
   onGroupCreated?: () => void
+  initialMemberIds?: string[]
+  defaultOpen?: boolean
+  triggerLabel?: string
+  triggerVariant?: 'default' | 'outline' | 'ghost' | 'secondary'
+  triggerClassName?: string
+  hideTrigger?: boolean
 }
 
-export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalProps) {
+export function CreateGroupModal({
+  dmRooms,
+  onGroupCreated,
+  initialMemberIds = [],
+  defaultOpen = false,
+  triggerLabel,
+  triggerVariant = 'default',
+  triggerClassName,
+  hideTrigger = false,
+}: CreateGroupModalProps) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const locale = useLocale()
+  const t = useTranslations('createGroup')
+  const [open, setOpen] = useState(defaultOpen)
   const [groupName, setGroupName] = useState('')
   const [description, setDescription] = useState('')
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(initialMemberIds)
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (initialMemberIds.length > 0) {
+      setSelectedMembers(initialMemberIds)
+    }
+  }, [initialMemberIds])
 
   const handleToggleMember = (memberId: string) => {
     setSelectedMembers((prev) =>
@@ -52,7 +76,7 @@ export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalPr
     e.preventDefault()
 
     if (!groupName.trim()) {
-      toast.error('Group name is required')
+      toast.error(t('errorNameRequired'))
       return
     }
 
@@ -74,42 +98,46 @@ export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalPr
       }
 
       const { club } = await response.json()
-      toast.success('Group created successfully!')
+      toast.success(t('success'))
       setGroupName('')
       setDescription('')
       setSelectedMembers([])
       setOpen(false)
       onGroupCreated?.()
-      router.push(`/clubs/${club.id}`)
+      router.push(`/${locale}/clubs/${club.id}`)
     } catch (error) {
       console.error('Error creating group:', error)
       toast.error(
-        error instanceof Error ? error.message : 'Failed to create group'
+        error instanceof Error ? error.message : t('errorCreate')
       )
     } finally {
       setIsLoading(false)
     }
   }
 
+  const resolvedTriggerLabel = triggerLabel || t('trigger')
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="w-full">Create Group</Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant={triggerVariant} className={triggerClassName || 'w-full'}>
+            {resolvedTriggerLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Group</DialogTitle>
-          <DialogDescription>
-            Create a new group chat and invite members from your conversations.
-          </DialogDescription>
+          <DialogTitle>{t('title')}</DialogTitle>
+          <DialogDescription>{t('description')}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleCreateGroup} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="group-name">Group Name</Label>
+            <Label htmlFor="group-name">{t('nameLabel')}</Label>
             <Input
               id="group-name"
-              placeholder="My Awesome Group"
+              placeholder={t('namePlaceholder')}
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               disabled={isLoading}
@@ -117,10 +145,10 @@ export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalPr
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
+            <Label htmlFor="description">{t('descriptionLabel')}</Label>
             <Textarea
               id="description"
-              placeholder="What's this group about?"
+              placeholder={t('descriptionPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isLoading}
@@ -129,10 +157,10 @@ export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalPr
           </div>
 
           <div className="space-y-2">
-            <Label>Add Members from Your Conversations</Label>
+            <Label>{t('addMembers')}</Label>
             {dmRooms.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">
-                You don&apos;t have any direct messages yet. Start a conversation first to add members to your group.
+                {t('noDm')}
               </p>
             ) : (
               <div className="border rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto">
@@ -167,11 +195,11 @@ export function CreateGroupModal({ dmRooms, onGroupCreated }: CreateGroupModalPr
               onClick={() => setOpen(false)}
               disabled={isLoading}
             >
-              Cancel
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={isLoading || !groupName.trim()}>
               {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Group
+              {t('submit')}
             </Button>
           </div>
         </form>

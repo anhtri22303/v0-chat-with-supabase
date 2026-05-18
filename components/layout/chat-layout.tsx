@@ -5,8 +5,8 @@ import { GlobalSidebar } from './global-sidebar'
 
 export function ChatLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  // If we are at exactly /dashboard, we consider it the "home" view.
-  const isHome = pathname === '/dashboard'
+  // Locale-aware: /en/dashboard or /vi/dashboard
+  const isHome = pathname.endsWith('/dashboard')
   
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background">

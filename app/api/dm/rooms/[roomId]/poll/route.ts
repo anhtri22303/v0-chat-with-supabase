@@ -42,6 +42,8 @@ export async function GET(
       `
       id,
       content,
+      media_url,
+      media_type,
       user_id,
       created_at,
       users:user_id(username, avatar_url),
@@ -64,6 +66,14 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Also get messages deleted since last poll
+  const { data: deletedMessages } = await supabase
+    .from('dm_messages')
+    .select('id')
+    .eq('room_id', roomId)
+    .not('deleted_at', 'is', null)
+    .gt('deleted_at', after)
+
   // Also get typing indicators
   const { data: typingData } = await supabase
     .from('dm_typing_indicators')
@@ -73,6 +83,7 @@ export async function GET(
 
   return NextResponse.json({
     messages: data || [],
+    deleted_ids: (deletedMessages || []).map((m: any) => m.id),
     typing: typingData || [],
     timestamp: new Date().toISOString(),
   })

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { isRoomMuted } from '@/lib/room-preferences'
 
 export interface Room {
   type: 'dm' | 'group'
@@ -98,9 +99,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         // If there's a new message
         if (prevTime && prevTime !== room.last_message_time) {
           const isOwnMessage = room.last_message_sender_id === userId
-          const isCurrentRoom = currentPathname === `/dm/${room.id}` || currentPathname === `/clubs/${room.id}`
+          const isCurrentRoom =
+            currentPathname === `/dm/${room.id}` ||
+            currentPathname === `/clubs/${room.id}` ||
+            currentPathname.startsWith(`/dm/${room.id}/`) ||
+            currentPathname.startsWith(`/clubs/${room.id}/`)
 
-          if (!isOwnMessage && !isCurrentRoom) {
+          if (!isOwnMessage && !isCurrentRoom && !isRoomMuted(room.id)) {
             addedIds.push(room.id)
 
             // Show toast if we haven't shown it for this exact message time
@@ -134,7 +139,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Handle a realtime new message event - show toast immediately without waiting for room refresh
   const handleRealtimeMessage = useCallback(async (payload: {
-    new: { id: string; room_id?: string; club_id?: string; user_id: string; content: string; created_at: string }
+    new: { id: string; room_id?: string; club_id?: string; user_id: string; content: string; media_type?: string; media_url?: string; created_at: string }
   }, type: 'dm' | 'club') => {
     const userId = currentUserIdRef.current
     if (!userId) return
@@ -151,19 +156,28 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!roomId) return
 
     const currentPathname = pathnameRef.current
-    const isCurrentRoom = currentPathname === `/dm/${roomId}` || currentPathname === `/clubs/${roomId}`
+    const isCurrentRoom =
+      currentPathname === `/dm/${roomId}` ||
+      currentPathname === `/clubs/${roomId}` ||
+      currentPathname.startsWith(`/dm/${roomId}/`) ||
+      currentPathname.startsWith(`/clubs/${roomId}/`)
 
     // Find room name from current rooms list
     const currentRooms = roomsRef.current
     const room = currentRooms.find(r => r.id === roomId)
     const roomName = room?.name || (type === 'dm' ? 'Direct Message' : 'Group Chat')
 
-    // Show toast immediately if not in the room
-    if (!isCurrentRoom) {
+    // Show toast immediately if not in the room and not muted
+    if (!isCurrentRoom && !isRoomMuted(roomId)) {
       const messageKey = `${roomId}-${msg.created_at}`
       if (!notifiedMessageTimesRef.current.has(messageKey)) {
+        const toastDescription = msg.media_type === 'image'
+          ? (msg.content ? `[Photo] ${msg.content}` : 'Sent a photo')
+          : msg.media_type === 'video'
+            ? (msg.content ? `[Video] ${msg.content}` : 'Sent a video')
+            : (msg.content.length > 80 ? msg.content.substring(0, 80) + '...' : msg.content)
         toast.info(`${roomName}`, {
-          description: msg.content.length > 80 ? msg.content.substring(0, 80) + '...' : msg.content,
+          description: toastDescription,
           duration: 6000,
         })
         notifiedMessageTimesRef.current.add(messageKey)

@@ -4,6 +4,7 @@ import { login } from '@/app/auth/actions'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FormEvent, Suspense, useEffect, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,6 +15,8 @@ import { toast } from 'sonner'
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const t = useTranslations('auth')
+  const locale = useLocale()
   const error = searchParams.get('error_description')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -22,12 +25,12 @@ function LoginForm() {
     // Check for persisted duplicate email notification
     const duplicateEmailNotif = localStorage.getItem('duplicateEmailNotif')
     if (duplicateEmailNotif) {
-      toast.error('This email is already registered. Please sign in instead.', {
+      toast.error(t('duplicateEmail'), {
         duration: 4000,
       })
       localStorage.removeItem('duplicateEmailNotif')
     }
-  }, [])
+  }, [t])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -37,19 +40,20 @@ function LoginForm() {
     const result = await login(formData)
 
     if (result?.error) {
-      setLoginError(result.error.message || 'Login failed')
+      const messageKey = result.error.message as string
+      setLoginError(t(messageKey, { default: t('loginFailed') }))
       setIsLoading(false)
       return
     }
 
-    router.push('/dashboard')
+    router.push(`/${locale}/dashboard`)
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Welcome to ChaTChiT</CardTitle>
+          <CardTitle className="text-2xl">{t('loginTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -57,23 +61,23 @@ function LoginForm() {
             {loginError && <p className="text-sm text-destructive">{loginError}</p>}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('email')}</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder={t('emailPlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('password')}</Label>
               <Input
                 id="password"
                 type="password"
                 name="password"
-                placeholder="••••••••"
+                placeholder={t('passwordPlaceholder')}
                 required
               />
             </div>
@@ -82,17 +86,17 @@ function LoginForm() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Signing in...
+                  {t('signInLoading')}
                 </>
               ) : (
-                'Sign In'
+                t('signIn')
               )}
             </Button>
 
             <p className="text-center text-sm">
-              Don&apos;t have an account?{' '}
-              <Link href="/auth/sign-up" className="text-primary hover:underline">
-                Sign up
+              {t('noAccount')}{' '}
+              <Link href={`/${locale}/auth/sign-up`} className="text-primary hover:underline">
+                {t('signUpLink')}
               </Link>
             </p>
           </form>
@@ -103,11 +107,13 @@ function LoginForm() {
 }
 
 export default function Login() {
+  const t = useTranslations('auth')
+
   return (
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin" aria-label={t('signInLoading')} />
         </div>
       }
     >
