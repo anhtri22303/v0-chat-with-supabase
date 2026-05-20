@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { attachReads, fetchReadsByMessageIds } from '@/lib/message-reads'
+import { checkDMRoomBlockStatus } from '@/lib/blocks'
 
 export async function GET(
   request: NextRequest,
@@ -117,6 +118,22 @@ export async function POST(
 
   if (!room) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Check block status between participants
+  const blockStatus = await checkDMRoomBlockStatus(supabase, user.id, roomId)
+  if (!blockStatus.canInteract) {
+    if (blockStatus.hasBlocked) {
+      return NextResponse.json({ 
+        error: 'You have blocked this user. Unblock them to send messages.',
+        code: 'BLOCKED_BY_YOU'
+      }, { status: 403 })
+    } else {
+      return NextResponse.json({ 
+        error: 'This user has blocked you. You cannot send messages to them.',
+        code: 'BLOCKED_BY_OTHER'
+      }, { status: 403 })
+    }
   }
 
   const body = await request.json()

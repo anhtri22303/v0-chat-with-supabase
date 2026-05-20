@@ -6,7 +6,9 @@ import { useLocale, useTranslations } from 'next-intl'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { logOut } from '@/app/auth/actions'
+import { getRingbackSound, setRingbackSound, type RingbackSound, getRingtone, setRingtone, type RingtoneSound, getNotificationSound, setNotificationSound, type NotificationSound } from '@/lib/call-preferences'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +43,39 @@ export function GlobalSidebar() {
   const [profile, setProfile] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null)
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
   const [creatingDm, setCreatingDm] = useState(false)
-  const { rooms, unseenRoomIds, refreshRooms } = useNotifications()
+  const [ringbackSound, setRingbackSoundState] = useState<RingbackSound>('messenger')
+  const [ringtone, setRingtoneState] = useState<RingtoneSound>('default')
+  const [notificationSound, setNotificationSoundState] = useState<NotificationSound>('default')
+
+  useEffect(() => {
+    setRingbackSoundState(getRingbackSound())
+    setRingtoneState(getRingtone())
+    setNotificationSoundState(getNotificationSound())
+  }, [])
+
+  const handleRingbackChange = (sound: RingbackSound) => {
+    setRingbackSound(sound)
+    setRingbackSoundState(sound)
+  }
+
+  const handleRingtoneChange = (sound: RingtoneSound) => {
+    setRingtone(sound)
+    setRingtoneState(sound)
+  }
+
+  const handleNotificationSoundChange = (sound: NotificationSound) => {
+    setNotificationSound(sound)
+    setNotificationSoundState(sound)
+  }
+  const { rooms, unseenRoomIds, isLoading, refreshRooms } = useNotifications()
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false)
+
+  // Track initial load completion
+  useEffect(() => {
+    if (!isLoading && !hasInitialLoaded) {
+      setHasInitialLoaded(true)
+    }
+  }, [isLoading, hasInitialLoaded])
 
   const switchLocale = (nextLocale: string) => {
     if (nextLocale === locale) return
@@ -151,7 +185,6 @@ export function GlobalSidebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem>{t('settings')}</DropdownMenuItem>
               <DropdownMenuItem>{t('pendingMessages')}</DropdownMenuItem>
               <DropdownMenuItem>{t('archivedChats')}</DropdownMenuItem>
               <DropdownMenuItem>{t('restrictedAccount')}</DropdownMenuItem>
@@ -161,11 +194,46 @@ export function GlobalSidebar() {
               <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{t('language')}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+                <DropdownMenuSubContent sideOffset={2} avoidCollisions alignOffset={-4}>
                   <DropdownMenuRadioGroup value={locale} onValueChange={switchLocale}>
                     <DropdownMenuRadioItem value="en">{t('english')}</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="vi">{t('vietnamese')}</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{t('soundSettings')}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-56" sideOffset={2} avoidCollisions alignOffset={-4}>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>{t('notificationSound')}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent sideOffset={2} avoidCollisions alignOffset={-4}>
+                      <DropdownMenuRadioGroup value={notificationSound} onValueChange={(v) => handleNotificationSoundChange(v as NotificationSound)}>
+                        <DropdownMenuRadioItem value="default">{t('notificationSoundNone')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="messages">{t('notificationSoundMessages')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="kids">{t('notificationSoundKids')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="whistle">{t('notificationSoundWhistle')}</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>{t('ringtoneSound')}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent sideOffset={2} avoidCollisions alignOffset={-4}>
+                      <DropdownMenuRadioGroup value={ringtone} onValueChange={(v) => handleRingtoneChange(v as RingtoneSound)}>
+                        <DropdownMenuRadioItem value="default">{t('ringtoneDefault')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="iphone">{t('ringtoneIphone')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="powerpoint">{t('ringtonePowerpoint')}</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>{t('ringbackSound')}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent sideOffset={2} avoidCollisions alignOffset={-4}>
+                      <DropdownMenuRadioGroup value={ringbackSound} onValueChange={(v) => handleRingbackChange(v as RingbackSound)}>
+                        <DropdownMenuRadioItem value="messenger">{t('ringbackMessenger')}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="tut-tut">{t('ringbackTutTut')}</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </DropdownMenuContent>
@@ -200,7 +268,23 @@ export function GlobalSidebar() {
       {/* Rooms List */}
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {rooms.length === 0 ? (
+          {!hasInitialLoaded ? (
+            // Skeleton loading state - only on initial load
+            <>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-3 w-10" />
+                    </div>
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : rooms.length === 0 ? (
             <div className="text-center p-4 mt-8">
               <p className="text-sm text-muted-foreground">{tSidebar('noConversations')}</p>
             </div>

@@ -6,9 +6,10 @@ import { Message, MessageData } from './message'
 import { MessageInput } from './message-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
-import { Pin, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Pin, X, ChevronDown, ChevronUp, Shield, ShieldOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import type { BlockCheckResult } from '@/hooks/use-block-user'
 import {
   cacheMessages,
   getCachedMessages,
@@ -20,6 +21,7 @@ import {
 } from '@/lib/message-cache'
 import { subscribeToTyping, sendTypingBroadcast } from '@/lib/typing-broadcast'
 import { getMessageQueueWorker } from '@/lib/message-queue'
+import type { ThemeSettings } from './theme-picker'
 
 // Generate UUID using native crypto API
 function generateUUID(): string {
@@ -41,6 +43,8 @@ interface ChatWindowProps {
   highlightMessageId?: string | null
   onLoadMessages?: (messages: MessageData[]) => void
   themeColor?: string
+  themeSettings?: ThemeSettings
+  otherUserId?: string | null
 }
 
 /** Normalize Supabase relation names to the generic names used by Message component */
@@ -169,8 +173,15 @@ export function ChatWindow({
   currentUserId,
   highlightMessageId,
   onLoadMessages,
-  themeColor = '#0A7CFF',
+  themeColor: themeColorProp = '#0A7CFF',
+  themeSettings,
+  otherUserId,
 }: ChatWindowProps) {
+  // Support both old themeColor prop and new themeSettings
+  const effectiveThemeColor = themeSettings?.themeColor || themeColorProp
+  const backgroundType = themeSettings?.backgroundType || 'default'
+  const backgroundValue = themeSettings?.backgroundValue
+  const backgroundOpacity = themeSettings?.backgroundOpacity ?? 1.0
   const t = useTranslations('chatWindow')
   const [messages, setMessages] = useState<MessageData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -184,6 +195,9 @@ export function ChatWindow({
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const [blockStatus, setBlockStatus] = useState<BlockCheckResult | null>(null)
+  const [showTimestamps, setShowTimestamps] = useState(false)
+  const swipeTouchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const apiBase = roomType === 'club' ? `/api/club/${roomId}` : `/api/dm/rooms/${roomId}`
   const lastReadMessageIdRef = useRef<string | null>(null)
@@ -206,6 +220,62 @@ export function ChatWindow({
       fetchUserInfo()
     }
   }, [currentUserId])
+
+  // Fetch block status for DM rooms
+  useEffect(() => {
+    if (!otherUserId || roomType !== 'dm') return
+
+    const fetchBlockStatus = async () => {
+      try {
+        const response = await fetch(`/api/blocks/check/${otherUserId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setBlockStatus(data)
+        }
+      } catch (err) {
+        console.error('Error fetching block status:', err)
+      }
+    }
+
+    fetchBlockStatus()
+
+    // Subscribe to realtime block changes
+    const supabase = createClient()
+    const channel = supabase.channel(`block-status-${otherUserId}`)
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'user_blocks',
+      },
+      () => {
+        fetchBlockStatus()
+      }
+    )
+
+    channel.subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [otherUserId, roomType])
+
+  // Handle unblock action
+  const handleUnblock = useCallback(async () => {
+    if (!otherUserId) return
+    try {
+      const response = await fetch(`/api/blocks/${otherUserId}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        setBlockStatus(prev => prev ? { ...prev, hasBlocked: false, canInteract: !prev.isBlockedBy } : null)
+      }
+    } catch (err) {
+      console.error('Error unblocking user:', err)
+    }
+  }, [otherUserId])
 
   // Handle typing broadcast
   const handleTyping = useCallback(
@@ -898,6 +968,26 @@ export function ChatWindow({
     setShouldAutoScroll(isNearBottom)
   }
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    swipeTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!swipeTouchStartRef.current) return
+    const touch = e.touches[0]
+    const dx = swipeTouchStartRef.current.x - touch.clientX
+    const dy = Math.abs(swipeTouchStartRef.current.y - touch.clientY)
+    if (dx > 30 && dy < 60) {
+      setShowTimestamps(true)
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    swipeTouchStartRef.current = null
+    setShowTimestamps(false)
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full bg-accent/10">
@@ -934,8 +1024,49 @@ export function ChatWindow({
     )
   }
 
+  // Compute background styles
+  const getBackgroundStyles = (): React.CSSProperties => {
+    if (backgroundType === 'default' || !backgroundValue) {
+      return {}
+    }
+    if (backgroundType === 'color') {
+      return { backgroundColor: backgroundValue }
+    }
+    if (backgroundType === 'image') {
+      return {
+        backgroundImage: `url(${backgroundValue})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }
+    }
+    return {}
+  }
+
+  const backgroundStyles = getBackgroundStyles()
+  const needsOverlay = backgroundType === 'image' && backgroundValue
+
   return (
-    <div className="flex flex-col h-full bg-accent/10">
+    <div className="flex flex-col h-full bg-accent/10 relative">
+      {/* Background layer - pointer-events-none so it doesn't block interactions */}
+      {backgroundType !== 'default' && backgroundValue && (
+        <div 
+          className="absolute inset-0 z-0 pointer-events-none"
+          style={{
+            ...backgroundStyles,
+            opacity: backgroundType === 'image' ? backgroundOpacity : 1,
+          }}
+        />
+      )}
+      {/* Overlay for image backgrounds - also non-interactive */}
+      {needsOverlay && (
+        <div 
+          className="absolute inset-0 z-[1] bg-background/40 pointer-events-none"
+          style={{ opacity: 1 - (backgroundOpacity * 0.3) }}
+        />
+      )}
+      {/* Content wrapper with z-index above background and subtle backdrop */}
+      <div className="relative z-10 flex flex-col h-full backdrop-blur-[1px]">
       {error && (
         <div className="p-3 bg-destructive/10 text-destructive text-sm m-4 rounded-md">
           {error}
@@ -985,6 +1116,9 @@ export function ChatWindow({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className="flex-1 overflow-y-auto space-y-1 p-4 md:px-8 lg:px-16"
       >
         {messagesWithPinState.length === 0 ? (
@@ -992,23 +1126,32 @@ export function ChatWindow({
             {t('noMessages')}
           </div>
         ) : (
-          messagesWithPinState.map((message) => (
-            <div key={message.id} id={`msg-${message.id}`}>
-              <Message
-                message={message}
-                isOwn={message.user_id === currentUserId}
-                currentUserId={currentUserId}
-                onDelete={handleDeleteMessage}
-                onReact={handleReact}
-                onReply={handleReply}
-                onPin={handlePin}
-                onUnpin={handleUnpin}
-                onRetry={handleRetry}
-                readerIdsToRender={readerIdsByMessage[message.id]}
-                themeColor={themeColor}
-              />
-            </div>
-          ))
+          messagesWithPinState.map((message, idx, arr) => {
+            const prev = arr[idx - 1]
+            const next = arr[idx + 1]
+            const isFirstInGroup = !prev || prev.user_id !== message.user_id
+            const isLastInGroup = !next || next.user_id !== message.user_id
+            return (
+              <div key={message.id} id={`msg-${message.id}`}>
+                <Message
+                  message={message}
+                  isOwn={message.user_id === currentUserId}
+                  currentUserId={currentUserId}
+                  onDelete={handleDeleteMessage}
+                  onReact={handleReact}
+                  onReply={handleReply}
+                  onPin={handlePin}
+                  onUnpin={handleUnpin}
+                  onRetry={handleRetry}
+                  readerIdsToRender={readerIdsByMessage[message.id]}
+                  themeColor={effectiveThemeColor}
+                  showAvatar={isLastInGroup}
+                  isFirstInGroup={isFirstInGroup}
+                  showTimestamp={showTimestamps}
+                />
+              </div>
+            )
+          })
         )}
         <div ref={messagesEndRef} className="h-2" />
       </div>
@@ -1027,20 +1170,55 @@ export function ChatWindow({
       )}
 
       <div className="border-t p-3 md:p-4 bg-background">
-        <MessageInput
-          onSend={(content) => handleSendMessage(content, currentUserInfo?.username)}
-          onSendMedia={handleSendMedia}
-          onTyping={handleTyping}
-          disabled={false}
-          placeholder={t('placeholder')}
-          replyingTo={replyingTo ? {
-            id: replyingTo.id,
-            content: replyingTo.content,
-            username: replyingTo.users.username,
-          } : null}
-          onCancelReply={handleCancelReply}
-        />
+        {/* Blocked input overlay - shown when cannot interact */}
+        {blockStatus && roomType === 'dm' && !blockStatus.canInteract && (
+          <div className="flex items-center justify-center py-3 text-center">
+            {blockStatus.isBlockedBy ? (
+              // Being blocked - just show message
+              <div className={cn(
+                "flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium",
+                "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              )}>
+                <Shield className="h-4 w-4" />
+                <span>{t('blockedYouTitle')}</span>
+              </div>
+            ) : (
+              // Has blocked - clickable to unblock
+              <button
+                onClick={handleUnblock}
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold",
+                  "bg-amber-500 text-white hover:bg-amber-600",
+                  "dark:bg-amber-600 dark:hover:bg-amber-700",
+                  "shadow-md hover:shadow-lg transition-all",
+                  "cursor-pointer"
+                )}
+              >
+                <ShieldOff className="h-4 w-4" />
+                <span>{t('unblockButton')}</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Normal input - hidden when blocked */}
+        {(!blockStatus || roomType !== 'dm' || blockStatus.canInteract) && (
+          <MessageInput
+            onSend={(content) => handleSendMessage(content, currentUserInfo?.username)}
+            onSendMedia={handleSendMedia}
+            onTyping={handleTyping}
+            disabled={false}
+            placeholder={t('placeholder')}
+            replyingTo={replyingTo ? {
+              id: replyingTo.id,
+              content: replyingTo.content,
+              username: replyingTo.users.username,
+            } : null}
+            onCancelReply={handleCancelReply}
+          />
+        )}
       </div>
+      </div>{/* End content wrapper */}
     </div>
   )
 }

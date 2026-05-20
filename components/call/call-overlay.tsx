@@ -1,12 +1,10 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Phone, PhoneOff, Video, Mic, MicOff } from 'lucide-react'
+import { Phone, PhoneOff, Video } from 'lucide-react'
 import { LiveKitRoomView } from './livekit-room-view'
 import type { ActiveCallState } from '@/lib/call-types'
 import { useTranslations } from 'next-intl'
-import { useState, useCallback } from 'react'
-import { useLocalParticipant } from '@livekit/components-react'
 
 interface CallOverlayProps {
   activeCall: ActiveCallState
@@ -16,36 +14,6 @@ interface CallOverlayProps {
   onDisconnected: () => void
   userAvatarUrl?: string | null
   userName?: string
-}
-
-function AudioControlButton() {
-  const { localParticipant } = useLocalParticipant()
-  const t = useTranslations('call')
-  const [isMuted, setIsMuted] = useState(false)
-
-  const toggleAudio = useCallback(async () => {
-    if (!localParticipant) return
-    
-    try {
-      const newState = !isMuted
-      await localParticipant.setMicrophoneEnabled(newState)
-      setIsMuted(!newState)
-    } catch {
-      // Handle error silently
-    }
-  }, [localParticipant, isMuted])
-
-  return (
-    <Button
-      size="icon"
-      variant={isMuted ? 'destructive' : 'secondary'}
-      className="rounded-full h-14 w-14 bg-white/20 hover:bg-white/30 text-white"
-      onClick={toggleAudio}
-      aria-label={isMuted ? t('unmute') : t('mute')}
-    >
-      {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-    </Button>
-  )
 }
 
 export function CallOverlay({
@@ -92,24 +60,12 @@ export function CallOverlay({
           serverUrl={activeCall.serverUrl}
           callType={activeCall.session.call_type}
           onDisconnected={onDisconnected}
+          onEndCall={onEndCall}
           userAvatarUrl={userAvatarUrl}
           userName={userName}
         />
       </div>
 
-      {/* Bottom control bar */}
-      <div className="flex items-center justify-center gap-6 p-6 bg-black/80 shrink-0">
-        <AudioControlButton />
-        <Button
-          variant="destructive"
-          size="icon"
-          className="rounded-full h-16 w-16"
-          onClick={onEndCall}
-          aria-label={t('endCall')}
-        >
-          <PhoneOff className="h-7 w-7" />
-        </Button>
-      </div>
     </div>
   )
 }

@@ -9,29 +9,24 @@ import {
   useRoomContext,
   useLocalParticipant,
 } from '@livekit/components-react'
-import { RoomEvent, Track, type LocalTrackPublication } from 'livekit-client'
+import { RoomEvent, Track } from 'livekit-client'
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import type { CallMediaType } from '@/lib/call-types'
 import { useTranslations } from 'next-intl'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Camera, CameraOff, FlipHorizontal } from 'lucide-react'
+import { Camera, CameraOff, FlipHorizontal, Mic, MicOff, PhoneOff } from 'lucide-react'
 
 interface LiveKitRoomViewProps {
   token: string
   serverUrl: string
   callType: CallMediaType
   onDisconnected: () => void
+  onEndCall?: () => void
   userAvatarUrl?: string | null
   userName?: string
 }
 
-export interface CameraControls {
-  isEnabled: boolean
-  facingMode: 'user' | 'environment'
-  toggleCamera: () => void
-  flipCamera: () => void
-}
 
 function ActiveSpeakerPulse() {
   const room = useRoomContext()
@@ -77,71 +72,96 @@ function ActiveSpeakerPulse() {
   )
 }
 
-function CameraControlBar({
-  onControlsChange,
-}: {
-  onControlsChange?: (controls: CameraControls) => void
-}) {
+function AudioControlButton() {
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+  const t = useTranslations('call')
+
+  const toggleAudio = useCallback(async () => {
+    if (!localParticipant) return
+
+    try {
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+    } catch {
+      // Handle error silently
+    }
+  }, [localParticipant, isMicrophoneEnabled])
+
+  const isMuted = !isMicrophoneEnabled
+
+  return (
+    <Button
+      size="icon"
+      variant={isMuted ? 'destructive' : 'secondary'}
+      className="rounded-full h-14 w-14 bg-white/20 hover:bg-white/30 text-white"
+      onClick={toggleAudio}
+      aria-label={isMuted ? t('unmute') : t('mute')}
+    >
+      {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+    </Button>
+  )
+}
+
+function CameraToggleButton() {
+  const { localParticipant, isCameraEnabled } = useLocalParticipant()
+  const t = useTranslations('call')
+
+  const toggleCamera = useCallback(async () => {
+    if (!localParticipant) return
+    try {
+      await localParticipant.setCameraEnabled(!isCameraEnabled)
+    } catch {
+      // Handle error silently
+    }
+  }, [localParticipant, isCameraEnabled])
+
+  return (
+    <Button
+      size="icon"
+      variant={isCameraEnabled ? 'secondary' : 'destructive'}
+      className="rounded-full h-14 w-14 bg-white/20 hover:bg-white/30 text-white"
+      onClick={toggleCamera}
+      aria-label={isCameraEnabled ? t('turnOffCamera') : t('turnOnCamera')}
+    >
+      {isCameraEnabled ? <Camera className="h-6 w-6" /> : <CameraOff className="h-6 w-6" />}
+    </Button>
+  )
+}
+
+function FlipCameraButton({ isCameraEnabled }: { isCameraEnabled: boolean }) {
   const { localParticipant } = useLocalParticipant()
   const t = useTranslations('call')
-  const [isEnabled, setIsEnabled] = useState(true)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user')
   const [isFlipping, setIsFlipping] = useState(false)
 
   // Initialize camera with front-facing (user) mode
   useEffect(() => {
     if (!localParticipant) return
-    
+
     const enableCamera = async () => {
       try {
-        await localParticipant.setCameraEnabled(true, {
-          facingMode: 'user',
-        })
-        setIsEnabled(true)
+        await localParticipant.setCameraEnabled(true, { facingMode: 'user' })
       } catch {
-        // Fallback without facing mode if not supported
         try {
           await localParticipant.setCameraEnabled(true)
-          setIsEnabled(true)
         } catch {
-          setIsEnabled(false)
+          // Silent fail
         }
       }
     }
-    
+
     enableCamera()
   }, [localParticipant])
 
-  const toggleCamera = useCallback(async () => {
-    if (!localParticipant) return
-    
-    try {
-      const newState = !isEnabled
-      await localParticipant.setCameraEnabled(newState)
-      setIsEnabled(newState)
-    } catch {
-      // Handle error silently
-    }
-  }, [localParticipant, isEnabled])
-
   const flipCamera = useCallback(async () => {
     if (!localParticipant || isFlipping) return
-    
+
     setIsFlipping(true)
     try {
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user'
-      
-      // Disable current camera
       await localParticipant.setCameraEnabled(false)
-      
-      // Re-enable with new facing mode
-      await localParticipant.setCameraEnabled(true, {
-        facingMode: newFacingMode,
-      })
-      
+      await localParticipant.setCameraEnabled(true, { facingMode: newFacingMode })
       setFacingMode(newFacingMode)
     } catch {
-      // If flip fails, try to re-enable with current mode
       try {
         await localParticipant.setCameraEnabled(true)
       } catch {
@@ -152,39 +172,17 @@ function CameraControlBar({
     }
   }, [localParticipant, facingMode, isFlipping])
 
-  // Report controls to parent
-  useEffect(() => {
-    onControlsChange?.({
-      isEnabled,
-      facingMode,
-      toggleCamera,
-      flipCamera,
-    })
-  }, [isEnabled, facingMode, toggleCamera, flipCamera, onControlsChange])
-
   return (
-    <div className="flex items-center justify-center gap-4 p-4">
-      <Button
-        size="icon"
-        variant={isEnabled ? 'default' : 'destructive'}
-        className="rounded-full h-14 w-14"
-        onClick={toggleCamera}
-        aria-label={isEnabled ? t('turnOffCamera') : t('turnOnCamera')}
-      >
-        {isEnabled ? <Camera className="h-6 w-6" /> : <CameraOff className="h-6 w-6" />}
-      </Button>
-      
-      <Button
-        size="icon"
-        variant="secondary"
-        className="rounded-full h-14 w-14 bg-white/20 hover:bg-white/30 text-white"
-        onClick={flipCamera}
-        disabled={isFlipping || !isEnabled}
-        aria-label={t('flipCamera')}
-      >
-        <FlipHorizontal className="h-6 w-6" />
-      </Button>
-    </div>
+    <Button
+      size="icon"
+      variant="secondary"
+      className="rounded-full h-14 w-14 bg-white/20 hover:bg-white/30 text-white"
+      onClick={flipCamera}
+      disabled={isFlipping || !isCameraEnabled}
+      aria-label={t('flipCamera')}
+    >
+      <FlipHorizontal className="h-6 w-6" />
+    </Button>
   )
 }
 
@@ -242,11 +240,40 @@ function ConnectingLabel() {
   return <>{t('videoConnecting')}</>
 }
 
+function EndCallButton({ onEndCall }: { onEndCall?: () => void }) {
+  const t = useTranslations('call')
+  return (
+    <Button
+      variant="destructive"
+      size="icon"
+      className="rounded-full h-14 w-14"
+      onClick={onEndCall}
+      aria-label={t('endCall')}
+    >
+      <PhoneOff className="h-6 w-6" />
+    </Button>
+  )
+}
+
+function VideoCallControls({ onEndCall }: { onEndCall?: () => void }) {
+  const { isCameraEnabled } = useLocalParticipant()
+
+  return (
+    <div className="flex items-center justify-center gap-6 p-6 bg-black/80 shrink-0">
+      <AudioControlButton />
+      <CameraToggleButton />
+      <FlipCameraButton isCameraEnabled={isCameraEnabled} />
+      <EndCallButton onEndCall={onEndCall} />
+    </div>
+  )
+}
+
 export function LiveKitRoomView({
   token,
   serverUrl,
   callType,
   onDisconnected,
+  onEndCall,
   userAvatarUrl,
   userName,
 }: LiveKitRoomViewProps) {
@@ -285,13 +312,17 @@ export function LiveKitRoomView({
           <div className="flex-1 min-h-0">
             <VideoStage userAvatarUrl={userAvatarUrl} userName={userName} />
           </div>
-          <CameraControlBar />
+          <VideoCallControls onEndCall={onEndCall} />
         </div>
       ) : (
         <div className="flex flex-col h-full">
           <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
             <ActiveSpeakerPulse />
             <p className="text-lg font-medium">{t('audioCall')}</p>
+          </div>
+          <div className="flex items-center justify-center gap-6 p-6 bg-black/80 shrink-0">
+            <AudioControlButton />
+            <EndCallButton onEndCall={onEndCall} />
           </div>
         </div>
       )}

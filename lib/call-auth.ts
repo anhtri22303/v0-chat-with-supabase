@@ -3,6 +3,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseClientLike = any
 
+import { checkDMRoomBlockStatus, checkClubRoomBlockStatus } from './blocks'
+
 export async function canAccessChatRoom(
   supabase: SupabaseClientLike,
   userId: string,
@@ -40,4 +42,54 @@ export async function getUserDisplayName(
     .single()
 
   return data?.username || 'User'
+}
+
+export interface CallBlockCheck {
+  canCall: boolean
+  error?: string
+  code?: string
+}
+
+export async function checkCanStartCall(
+  supabase: SupabaseClientLike,
+  userId: string,
+  roomType: 'dm' | 'club',
+  roomId: string
+): Promise<CallBlockCheck> {
+  // First check if user can access the room
+  const canAccess = await canAccessChatRoom(supabase, userId, roomType, roomId)
+  if (!canAccess) {
+    return { canCall: false, error: 'You do not have access to this room', code: 'NO_ACCESS' }
+  }
+
+  // Then check block status
+  if (roomType === 'dm') {
+    const blockStatus = await checkDMRoomBlockStatus(supabase, userId, roomId)
+    if (!blockStatus.canInteract) {
+      if (blockStatus.hasBlocked) {
+        return {
+          canCall: false,
+          error: 'You have blocked this user. Unblock them to make calls.',
+          code: 'BLOCKED_BY_YOU'
+        }
+      } else {
+        return {
+          canCall: false,
+          error: 'This user has blocked you. You cannot make calls to them.',
+          code: 'BLOCKED_BY_OTHER'
+        }
+      }
+    }
+  } else {
+    const blockStatus = await checkClubRoomBlockStatus(supabase, userId, roomId)
+    if (!blockStatus.canSend) {
+      return {
+        canCall: false,
+        error: 'You cannot make calls because you have blocked some members or been blocked.',
+        code: 'BLOCKED'
+      }
+    }
+  }
+
+  return { canCall: true }
 }

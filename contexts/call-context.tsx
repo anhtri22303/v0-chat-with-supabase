@@ -16,6 +16,7 @@ import type { ActiveCallState, CallMediaType, CallRoomType, CallSession } from '
 import { IncomingCallDialog } from '@/components/call/incoming-call-dialog'
 import { CallOverlay } from '@/components/call/call-overlay'
 import { startRingtone, type RingtoneHandle } from '@/lib/ringtone'
+import { getRingbackSound, getRingbackSoundUrl } from '@/lib/call-preferences'
 import { useTranslations } from 'next-intl'
 
 interface StartCallParams {
@@ -181,7 +182,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       current.session.status === 'ringing' && current.session.caller_id === userId
 
     if (shouldRing && !ringbackRef.current) {
-      ringbackRef.current = startRingtone(0.14)
+      const soundUrl = getRingbackSoundUrl(getRingbackSound())
+      ringbackRef.current = startRingtone(0.14, soundUrl)
     }
 
     if (!shouldRing) {

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccessChatRoom, getUserDisplayName } from '@/lib/call-auth'
+import { checkCanStartCall, getUserDisplayName } from '@/lib/call-auth'
 import {
   createLiveKitToken,
   getLiveKitRoomName,
@@ -30,9 +30,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    const hasAccess = await canAccessChatRoom(supabase, user.id, roomType, roomId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Check block status before starting call
+    const callCheck = await checkCanStartCall(supabase, user.id, roomType, roomId)
+    if (!callCheck.canCall) {
+      return NextResponse.json({ error: callCheck.error, code: callCheck.code }, { status: 403 })
     }
 
     // End any stale ringing/active sessions for this room

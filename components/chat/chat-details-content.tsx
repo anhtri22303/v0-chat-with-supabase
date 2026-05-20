@@ -32,10 +32,14 @@ import { MediaPreviewGrid } from './media-preview-grid'
 import { MediaGallery } from './media-gallery'
 import { ChatSearchDialog } from './chat-search-dialog'
 import { CreateGroupModal } from '@/components/home/create-group-modal'
-import { ThemePicker, useThemeColor } from './theme-picker'
+import { ThemePicker, useThemeColor, type ThemeSettings } from './theme-picker'
+import { BlockUserDialog } from './block-user-dialog'
+import { MuteNotificationsDialog } from './mute-notifications-dialog'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCall } from '@/contexts/call-context'
+import { useMuteNotifications } from '@/hooks/use-mute-notifications'
+import { useBlockStatus } from '@/hooks/use-block-user'
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi
 
@@ -72,7 +76,8 @@ export interface ChatDetailsContentProps {
   onBack?: () => void
   enableCalls?: boolean
   themeColor?: string
-  onThemeChange?: (color: string) => void
+  themeSettings?: ThemeSettings
+  onThemeChange?: (settings: ThemeSettings) => void
 }
 
 export function ChatDetailsContent({
@@ -92,22 +97,46 @@ export function ChatDetailsContent({
   onSearchSelect,
   enableCalls = true,
   themeColor = '#0A7CFF',
+  themeSettings,
   onThemeChange,
 }: ChatDetailsContentProps) {
   const t = useTranslations('chatDetails')
   const { startCall } = useCall()
   const { updateThemeForRoom } = useThemeColor()
+  const { loadMuteStatus, isMuted } = useMuteNotifications()
+  const { status: blockStatus } = useBlockStatus(otherUserId || null)
   const [muted, setMuted] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [links, setLinks] = useState<string[]>([])
   const [mediaAccordion, setMediaAccordion] = useState<string | undefined>()
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false)
+  const [muteDialogOpen, setMuteDialogOpen] = useState(false)
+  const [muteStatus, setMuteStatus] = useState<{is_muted: boolean, muted_until: string | null, time_remaining: string | null}>({
+    is_muted: false,
+    muted_until: null,
+    time_remaining: null,
+  })
+  const [currentSettings, setCurrentSettings] = useState<ThemeSettings>(themeSettings || {
+    themeColor,
+    backgroundType: 'default',
+    backgroundValue: null,
+    backgroundOpacity: 1.0,
+  })
 
   const apiBase = roomType === 'dm' ? `/api/dm/rooms/${roomId}` : `/api/club/${roomId}`
 
+  // Load mute status from server
   useEffect(() => {
+    const loadStatus = async () => {
+      const status = await loadMuteStatus(roomId, roomType)
+      setMuteStatus(status)
+      setMuted(status.is_muted)
+    }
+    loadStatus()
+    // Keep localStorage in sync for backward compatibility
     setMuted(isRoomMuted(roomId))
-  }, [roomId])
+  }, [roomId, roomType, loadMuteStatus])
 
   useEffect(() => {
     const loadLinks = async () => {
@@ -130,17 +159,21 @@ export function ChatDetailsContent({
     loadLinks()
   }, [apiBase])
 
-  const handleMuteChange = (checked: boolean) => {
+  const handleMuteOpen = () => {
+    setMuteDialogOpen(true)
+  }
+
+  const handleMuteSuccess = () => {
+    // Refresh mute status
+    loadMuteStatus(roomId, roomType).then(status => {
+      setMuteStatus(status)
+      setMuted(status.is_muted)
+    })
+    // Keep localStorage in sync
     const currentlyMuted = isRoomMuted(roomId)
-    if (currentlyMuted !== checked) {
+    if (currentlyMuted !== isMuted(roomId, roomType)) {
       toggleRoomMute(roomId)
     }
-    setMuted(checked)
-    toast.success(
-      checked
-        ? t('muteToastOn', { name: displayName })
-        : t('muteToastOff', { name: displayName })
-    )
   }
 
   const handlePlaceholder = (label: string) => {
@@ -284,7 +317,8 @@ export function ChatDetailsContent({
                   ? t('muteOn', { name: displayName })
                   : t('muteOff', { name: displayName })
               }
-              trailing={<Switch checked={muted} onCheckedChange={handleMuteChange} />}
+              onClick={handleMuteOpen}
+              showChevron
             />
             <ActionRow
               icon={Volume2}
@@ -420,10 +454,10 @@ export function ChatDetailsContent({
               <button
                 type="button"
                 className="flex items-center gap-2 w-full hover:text-foreground"
-                onClick={() => handlePlaceholder(t('blockUser'))}
+                onClick={() => setBlockDialogOpen(true)}
               >
                 <Shield className="h-4 w-4" />
-                {t('blockUser')}
+                {blockStatus.hasBlocked ? t('unblockUser') : t('blockUser')}
               </button>
             </div>
           </AccordionContent>
@@ -434,7 +468,7 @@ export function ChatDetailsContent({
             <ActionRow
               icon={muted ? BellOff : Bell}
               label={muted ? t('mutePanelOn') : t('mutePanelOff')}
-              trailing={<Switch checked={muted} onCheckedChange={handleMuteChange} />}
+              onClick={handleMuteOpen}
             />
             {roomType === 'dm' && otherUserId && (
               <div className="mt-3">
@@ -460,11 +494,13 @@ export function ChatDetailsContent({
       />
 
       <ThemePicker
-        currentColor={themeColor}
-        onSelect={async (color) => {
-          const success = await updateThemeForRoom(roomId, roomType, color)
+        currentColor={currentSettings.themeColor}
+        currentBackground={currentSettings}
+        onSelect={async (settings) => {
+          const success = await updateThemeForRoom(roomId, roomType, settings)
           if (success) {
-            onThemeChange?.(color)
+            setCurrentSettings(settings)
+            onThemeChange?.(settings)
             toast.success(t('themeUpdated'))
           } else {
             toast.error(t('themeUpdateFailed'))
@@ -472,6 +508,33 @@ export function ChatDetailsContent({
         }}
         open={themePickerOpen}
         onOpenChange={setThemePickerOpen}
+      />
+
+      {roomType === 'dm' && otherUserId && (
+        <BlockUserDialog
+          userId={otherUserId}
+          userName={otherUsername || displayName}
+          isOpen={blockDialogOpen}
+          onOpenChange={setBlockDialogOpen}
+          initialBlocked={blockStatus.hasBlocked}
+          onBlocked={() => {
+            handleMuteSuccess()
+          }}
+          onUnblocked={() => {
+            handleMuteSuccess()
+          }}
+        />
+      )}
+
+      <MuteNotificationsDialog
+        roomId={roomId}
+        roomType={roomType}
+        roomName={displayName}
+        isOpen={muteDialogOpen}
+        onOpenChange={setMuteDialogOpen}
+        currentStatus={muteStatus}
+        onMuted={handleMuteSuccess}
+        onUnmuted={handleMuteSuccess}
       />
     </div>
   )

@@ -4,7 +4,9 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { isRoomMuted } from '@/lib/room-preferences'
+import { isRoomMuted as isRoomMutedLocal, toggleRoomMute } from '@/lib/room-preferences'
+import { getNotificationSound, getNotificationSoundUrl } from '@/lib/call-preferences'
+import { playNotificationSound } from '@/lib/ringtone'
 import { useTranslations } from 'next-intl'
 
 export interface Room {
@@ -26,6 +28,7 @@ export interface Room {
 interface NotificationContextType {
   rooms: Room[]
   unseenRoomIds: Set<string>
+  isLoading: boolean
   markRoomAsSeen: (roomId: string) => void
   refreshRooms: () => Promise<void>
 }
@@ -45,7 +48,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const t = useTranslations('notifications')
   const [rooms, setRooms] = useState<Room[]>([])
   const [unseenRoomIds, setUnseenRoomIds] = useState<Set<string>>(new Set())
+  const [isLoading, setIsLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [serverMutes, setServerMutes] = useState<Record<string, {is_muted: boolean, muted_until: string | null}>>({})
 
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
@@ -79,10 +84,61 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     fetchUser()
   }, [])
 
+  // Fetch server mutes periodically
+  const fetchServerMutes = useCallback(async () => {
+    const userId = currentUserIdRef.current
+    if (!userId) return
+
+    try {
+      const response = await fetch('/api/mutes')
+      if (!response.ok) return
+      
+      const data = await response.json()
+      const mutes: Record<string, {is_muted: boolean, muted_until: string | null}> = {}
+      
+      for (const mute of data.mutes || []) {
+        const key = `${mute.room_type}:${mute.room_id}`
+        mutes[key] = {
+          is_muted: true,
+          muted_until: mute.muted_until,
+        }
+        // Sync with localStorage
+        if (!isRoomMutedLocal(mute.room_id)) {
+          toggleRoomMute(mute.room_id)
+        }
+      }
+      
+      setServerMutes(mutes)
+    } catch (error) {
+      console.error('Error fetching server mutes:', error)
+    }
+  }, [])
+
+  // Check if room is muted (combines local and server checks)
+  const isRoomMuted = useCallback((roomId: string, roomType?: 'dm' | 'club'): boolean => {
+    // Check local first
+    if (isRoomMutedLocal(roomId)) return true
+    
+    // Check server mutes
+    const type = roomType || 'dm'
+    const key = `${type}:${roomId}`
+    const serverMute = serverMutes[key]
+    
+    if (!serverMute) return false
+    
+    // Check if expired
+    if (serverMute.muted_until && new Date(serverMute.muted_until) < new Date()) {
+      return false
+    }
+    
+    return serverMute.is_muted
+  }, [serverMutes])
+
   const fetchRooms = useCallback(async () => {
     const userId = currentUserIdRef.current
     if (!userId) return
 
+    setIsLoading(true)
     try {
       const response = await fetch('/api/rooms')
       if (!response.ok) return
@@ -107,7 +163,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             currentPathname.startsWith(`/dm/${room.id}/`) ||
             currentPathname.startsWith(`/clubs/${room.id}/`)
 
-          if (!isOwnMessage && !isCurrentRoom && !isRoomMuted(room.id)) {
+          if (!isOwnMessage && !isCurrentRoom && !isRoomMuted(room.id, room.type === 'group' ? 'club' : room.type)) {
             addedIds.push(room.id)
 
             // Show toast if we haven't shown it for this exact message time
@@ -117,6 +173,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 description: room.last_message,
                 duration: 6000,
               })
+              const notifUrl = getNotificationSoundUrl(getNotificationSound())
+              if (notifUrl) playNotificationSound(0.5, notifUrl)
               notifiedMessageTimesRef.current.add(messageKey)
             }
           }
@@ -136,6 +194,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     } catch (error) {
       console.error('Error fetching rooms:', error)
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
@@ -170,7 +230,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const roomName = room?.name || (type === 'dm' ? t('directMessage') : t('groupChat'))
 
     // Show toast immediately if not in the room and not muted
-    if (!isCurrentRoom && !isRoomMuted(roomId)) {
+    if (!isCurrentRoom && !isRoomMuted(roomId, type)) {
       const messageKey = `${roomId}-${msg.created_at}`
       if (!notifiedMessageTimesRef.current.has(messageKey)) {
         const toastDescription = msg.media_type === 'image'
@@ -182,6 +242,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           description: toastDescription,
           duration: 6000,
         })
+        const notifUrl = getNotificationSoundUrl(getNotificationSound())
+        if (notifUrl) playNotificationSound(0.5, notifUrl)
         notifiedMessageTimesRef.current.add(messageKey)
       }
 
@@ -256,7 +318,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     fetchRooms()
 
     const intervalId = setInterval(fetchRooms, 5000)
-    return () => clearInterval(intervalId)
+    
+    // Also fetch server mutes periodically
+    fetchServerMutes()
+    const mutesIntervalId = setInterval(fetchServerMutes, 30000) // Every 30 seconds
+    
+    return () => {
+      clearInterval(intervalId)
+      clearInterval(mutesIntervalId)
+    }
   }, [currentUserId, fetchRooms])
 
   const markRoomAsSeen = useCallback((roomId: string) => {
@@ -271,9 +341,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const contextValue = useMemo(() => ({
     rooms,
     unseenRoomIds,
+    isLoading,
     markRoomAsSeen,
     refreshRooms: fetchRooms,
-  }), [rooms, unseenRoomIds, markRoomAsSeen, fetchRooms])
+  }), [rooms, unseenRoomIds, isLoading, markRoomAsSeen, fetchRooms])
 
   return (
     <NotificationContext.Provider value={contextValue}>

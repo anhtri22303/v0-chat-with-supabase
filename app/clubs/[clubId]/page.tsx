@@ -14,7 +14,7 @@ import { ChatLayout } from '@/components/layout/chat-layout'
 import { useIsLargeScreen } from '@/hooks/use-media-query'
 import { useCall } from '@/contexts/call-context'
 import { useTranslations } from 'next-intl'
-import { useThemeColor } from '@/components/chat/theme-picker'
+import { useThemeColor, type ThemeSettings } from '@/components/chat/theme-picker'
 import type { ClubMemberInfo } from '@/components/chat/chat-details-content'
 
 export default function ClubChatPage() {
@@ -31,7 +31,12 @@ export default function ClubChatPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [themeColor, setThemeColor] = useState('#0A7CFF')
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>({
+    themeColor: '#0A7CFF',
+    backgroundType: 'default',
+    backgroundValue: null,
+    backgroundOpacity: 1.0,
+  })
   const isLargeScreen = useIsLargeScreen()
 
   const { markRoomAsSeen } = useNotifications()
@@ -77,9 +82,9 @@ export default function ClubChatPage() {
 
         setClub(clubData)
 
-        // Fetch theme color
+        // Fetch theme settings
         const clubTheme = await getThemeForRoom(clubId, 'club')
-        setThemeColor(clubTheme)
+        setThemeSettings(clubTheme)
 
         const { data: membersData } = await supabase
           .from('club_members')
@@ -104,7 +109,7 @@ export default function ClubChatPage() {
     }
 
     loadData()
-  }, [clubId, router])
+  }, [clubId, router, getThemeForRoom])
 
   const handleInfoClick = useCallback(() => {
     if (isLargeScreen) {
@@ -198,7 +203,7 @@ export default function ClubChatPage() {
               roomType="club"
               currentUserId={user.id}
               highlightMessageId={highlightMessageId}
-              themeColor={themeColor}
+              themeSettings={themeSettings}
             />
           </section>
         </div>
@@ -214,8 +219,8 @@ export default function ClubChatPage() {
             memberCount={members.length}
             onSearchSelect={handleSearchSelect}
             onClose={() => setDetailsOpen(false)}
-            themeColor={themeColor}
-            onThemeChange={setThemeColor}
+            themeSettings={themeSettings}
+            onThemeChange={setThemeSettings}
           />
         )}
       </div>

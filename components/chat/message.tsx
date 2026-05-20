@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Trash2, SmilePlus, Reply, MoreVertical, Pin, PinOff, Loader2, X } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { enUS, vi } from 'date-fns/locale'
 import { useState, useCallback, useRef, useEffect } from 'react'
 
@@ -78,6 +78,12 @@ interface MessageProps {
   readerIdsToRender?: string[]
   /** Theme color for own messages (Messenger-style) */
   themeColor?: string
+  /** Whether to show the avatar (true for last msg in a consecutive group) */
+  showAvatar?: boolean
+  /** Whether this is the first message in a consecutive group (show name header) */
+  isFirstInGroup?: boolean
+  /** Mobile: whether timestamps panel is revealed (swipe-left mode) */
+  showTimestamp?: boolean
 }
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
@@ -117,6 +123,9 @@ export function Message({
   onRetry,
   readerIdsToRender,
   themeColor = '#0A7CFF',
+  showAvatar = true,
+  isFirstInGroup = true,
+  showTimestamp = false,
 }: MessageProps) {
   const t = useTranslations('message')
   const locale = useLocale()
@@ -196,17 +205,34 @@ export function Message({
     }
   }
 
+  const shortTime = format(new Date(message.created_at), 'h:mm a')
+
   return (
-    <div className={cn('group flex gap-3 py-1', isOwn && 'flex-row-reverse')}>
+    <div className={cn('group flex gap-3 items-center', isOwn && 'flex-row-reverse', isFirstInGroup ? 'pt-2 pb-0' : 'py-0.5')}>
+      {/* Mobile swipe timestamp — right side for own messages */}
+      {isOwn && (
+        <span className={cn(
+          'hidden text-[11px] text-muted-foreground/70 whitespace-nowrap flex-shrink-0 transition-all duration-200',
+          'max-md:block',
+          showTimestamp ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
+        )}>
+          {shortTime}
+        </span>
+      )}
+
       {!isOwn && (
-        <Avatar className="h-8 w-8 flex-shrink-0 mt-auto mb-1">
-          <AvatarImage src={message.users.avatar_url} alt={message.users.username} />
-          <AvatarFallback>{message.users.username[0]?.toUpperCase()}</AvatarFallback>
-        </Avatar>
+        showAvatar ? (
+          <Avatar className="h-8 w-8 flex-shrink-0 self-end mb-1">
+            <AvatarImage src={message.users.avatar_url} alt={message.users.username} />
+            <AvatarFallback>{message.users.username[0]?.toUpperCase()}</AvatarFallback>
+          </Avatar>
+        ) : (
+          <div className="h-8 w-8 flex-shrink-0" />
+        )
       )}
 
       <div className={cn('flex flex-col gap-1 max-w-[75%]', isOwn && 'items-end')}>
-        {!isOwn && (
+        {!isOwn && isFirstInGroup && (
           <div className="flex items-center gap-2 px-1">
             <span className="text-xs font-medium text-muted-foreground">{message.users.username}</span>
             <span className="text-[10px] text-muted-foreground/70">
@@ -249,13 +275,27 @@ export function Message({
         )}
 
         <div className={cn("flex items-end gap-2", isOwn && "flex-row-reverse")}>
+          {/* Bubble wrapper — relative so tooltip can anchor to it */}
+          <div className="relative">
+            {/* Desktop hover timestamp tooltip — floats beside the bubble */}
+            <div className={cn(
+              'hidden md:flex absolute top-1/2 -translate-y-1/2 z-50',
+              'pointer-events-none select-none',
+              'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
+              isOwn ? 'left-[calc(100%+6px)]' : 'right-[calc(100%+6px)]'
+            )}>
+              <span className="bg-popover text-popover-foreground text-[11px] whitespace-nowrap px-2 py-1 rounded-md shadow-md border border-border/30">
+                {shortTime}
+              </span>
+            </div>
+
           <div
             className={cn(
               'text-[15px] break-words shadow-sm relative',
               message.media_url ? 'rounded-2xl overflow-hidden' : 'px-4 py-2.5',
               isOwn
                 ? 'rounded-2xl rounded-tr-sm'
-                : 'bg-accent/50 text-foreground rounded-2xl rounded-tl-sm',
+                : 'bg-background/90 backdrop-blur-sm text-foreground rounded-2xl rounded-tl-sm border border-border/20',
               message.is_pinned && 'ring-1 ring-amber-500/30'
             )}
             style={isOwn ? {
@@ -305,6 +345,7 @@ export function Message({
               <FloatingEmoji key={f.id} emoji={f.emoji} onDone={() => removeFloating(f.id)} />
             ))}
           </div>
+          </div>{/* end bubble wrapper */}
 
           {/* Actions */}
           <div className={cn("flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0", isOwn ? "flex-row-reverse" : "flex-row")}>
@@ -441,6 +482,17 @@ export function Message({
           />
         )}
       </div>
+
+      {/* Mobile swipe timestamp — right side for other users' messages */}
+      {!isOwn && (
+        <span className={cn(
+          'hidden text-[11px] text-muted-foreground/70 whitespace-nowrap flex-shrink-0 transition-all duration-200',
+          'max-md:block',
+          showTimestamp ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 pointer-events-none'
+        )}>
+          {shortTime}
+        </span>
+      )}
     </div>
   )
 }

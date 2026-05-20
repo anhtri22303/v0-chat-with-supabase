@@ -13,6 +13,7 @@ import { Phone, PhoneOff, Video } from 'lucide-react'
 import type { CallSession } from '@/lib/call-types'
 import { useEffect, useRef } from 'react'
 import { startRingtone, type RingtoneHandle } from '@/lib/ringtone'
+import { getRingtone, getRingtoneUrl } from '@/lib/call-preferences'
 import { useTranslations } from 'next-intl'
 
 interface IncomingCallDialogProps {
@@ -46,7 +47,8 @@ export function IncomingCallDialog({
     }
 
     ringtoneRef.current?.stop()
-    ringtoneRef.current = startRingtone(0.18)
+    const soundUrl = getRingtoneUrl(getRingtone())
+    ringtoneRef.current = startRingtone(0.18, soundUrl)
 
     return () => {
       ringtoneRef.current?.stop()

@@ -16,8 +16,6 @@
 
 ---
 
-![chaTchiT Demo](./public/demo.png)
-
 </div>
 
 ---

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { attachReads, fetchReadsByMessageIds } from '@/lib/message-reads'
+import { checkClubRoomBlockStatus } from '@/lib/blocks'
 
 export async function GET(
   request: NextRequest,
@@ -111,6 +112,15 @@ export async function POST(
 
   if (!membership) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Check block status with club members
+  const blockStatus = await checkClubRoomBlockStatus(supabase, user.id, clubId)
+  if (!blockStatus.canSend) {
+    return NextResponse.json({ 
+      error: 'You cannot send messages because you have blocked some members or been blocked.',
+      code: 'BLOCKED'
+    }, { status: 403 })
   }
 
   const body = await request.json()
