@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { isRoomMuted } from '@/lib/room-preferences'
+import { useTranslations } from 'next-intl'
 
 export interface Room {
   type: 'dm' | 'group'
@@ -41,6 +42,7 @@ function getRealtimeClient() {
 }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('notifications')
   const [rooms, setRooms] = useState<Room[]>([])
   const [unseenRoomIds, setUnseenRoomIds] = useState<Set<string>>(new Set())
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -165,16 +167,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Find room name from current rooms list
     const currentRooms = roomsRef.current
     const room = currentRooms.find(r => r.id === roomId)
-    const roomName = room?.name || (type === 'dm' ? 'Direct Message' : 'Group Chat')
+    const roomName = room?.name || (type === 'dm' ? t('directMessage') : t('groupChat'))
 
     // Show toast immediately if not in the room and not muted
     if (!isCurrentRoom && !isRoomMuted(roomId)) {
       const messageKey = `${roomId}-${msg.created_at}`
       if (!notifiedMessageTimesRef.current.has(messageKey)) {
         const toastDescription = msg.media_type === 'image'
-          ? (msg.content ? `[Photo] ${msg.content}` : 'Sent a photo')
+          ? (msg.content ? t('sentPhotoCaption', { caption: msg.content }) : t('sentPhoto'))
           : msg.media_type === 'video'
-            ? (msg.content ? `[Video] ${msg.content}` : 'Sent a video')
+            ? (msg.content ? t('sentVideoCaption', { caption: msg.content }) : t('sentVideo'))
             : (msg.content.length > 80 ? msg.content.substring(0, 80) + '...' : msg.content)
         toast.info(`${roomName}`, {
           description: toastDescription,

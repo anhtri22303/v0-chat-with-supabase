@@ -27,6 +27,8 @@ import { toast } from 'sonner'
 import { useNotifications } from '@/contexts/notification-context'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { AvatarEditModal } from '@/components/profile/avatar-edit-modal'
 
 export function GlobalSidebar() {
   const router = useRouter()
@@ -36,6 +38,8 @@ export function GlobalSidebar() {
   const tToasts = useTranslations('toasts')
   const locale = useLocale()
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null)
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false)
   const [creatingDm, setCreatingDm] = useState(false)
   const { rooms, unseenRoomIds, refreshRooms } = useNotifications()
 
@@ -63,9 +67,23 @@ export function GlobalSidebar() {
       }
 
       setUser(user)
+
+      try {
+        const res = await fetch('/api/users/me')
+        if (res.ok) {
+          const data = await res.json()
+          setProfile(data)
+        }
+      } catch {
+        // ignore
+      }
     }
     checkAuth()
   }, [router])
+
+  const handleAvatarSaved = (newUrl: string) => {
+    setProfile((p) => (p ? { ...p, avatar_url: newUrl } : p))
+  }
 
   const handleStartDM = async (otherUserId: string, username: string) => {
     setCreatingDm(true)
@@ -102,10 +120,27 @@ export function GlobalSidebar() {
   return (
     <div className="flex flex-col h-full bg-card/50">
       {/* Sidebar Header */}
-      <div className="p-4 border-b flex items-center justify-between bg-card">
-        <div>
-          <h2 className="font-bold text-lg">ChaTChiT</h2>
-          <p className="text-xs text-muted-foreground truncate w-32 md:w-auto">{user?.email}</p>
+      <div className="p-4 border-b flex items-center justify-between gap-2 bg-card">
+        <button
+          type="button"
+          onClick={() => setAvatarModalOpen(true)}
+          className="group relative flex-shrink-0"
+          aria-label={t('editAvatarAria')}
+          title={t('editAvatarAria')}
+        >
+          <Avatar className="h-10 w-10 border-2 border-border transition-opacity group-hover:opacity-80">
+            <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.username || ''} />
+            <AvatarFallback>
+              {(profile?.username || user?.email || '?')[0]?.toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-medium">
+            {t('editShort')}
+          </span>
+        </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-bold text-base truncate">{profile?.username || 'ChaTChiT'}</h2>
+          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
@@ -151,6 +186,16 @@ export function GlobalSidebar() {
         />
         <CreateGroupModal dmRooms={dmRooms} onGroupCreated={refreshRooms} />
       </div>
+
+      {profile && (
+        <AvatarEditModal
+          open={avatarModalOpen}
+          onOpenChange={setAvatarModalOpen}
+          currentAvatarUrl={profile.avatar_url}
+          username={profile.username}
+          onSaved={handleAvatarSaved}
+        />
+      )}
 
       {/* Rooms List */}
       <ScrollArea className="flex-1">

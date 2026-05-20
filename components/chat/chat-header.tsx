@@ -1,10 +1,14 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { formatDistanceToNowStrict } from 'date-fns'
+import { enUS, vi } from 'date-fns/locale'
+import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ArrowLeft, Info, Phone, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePresence } from '@/contexts/presence-context'
 
 interface ChatHeaderProps {
   title: string
@@ -18,6 +22,9 @@ interface ChatHeaderProps {
   onVideoCall?: () => void
   activeCallBadge?: boolean
   onJoinActiveCall?: () => void
+  otherUserId?: string
+  otherUserLastSeen?: string | null
+  isDirectMessage?: boolean
 }
 
 export function ChatHeader({
@@ -32,8 +39,27 @@ export function ChatHeader({
   onVideoCall,
   activeCallBadge,
   onJoinActiveCall,
+  otherUserId,
+  otherUserLastSeen,
+  isDirectMessage = false,
 }: ChatHeaderProps) {
   const t = useTranslations('chatHeader')
+  const locale = useLocale()
+  const { isOnline } = usePresence()
+
+  const dateLocale = locale === 'vi' ? vi : enUS
+
+  const presenceSubtitle = isDirectMessage && otherUserId
+    ? isOnline(otherUserId)
+      ? t('activeNow')
+      : otherUserLastSeen
+        ? t('activeAgo', {
+            time: formatDistanceToNowStrict(new Date(otherUserLastSeen), { locale: dateLocale }),
+          })
+        : subtitle
+    : subtitle
+
+  const showOnlineDot = isDirectMessage && !!otherUserId && isOnline(otherUserId)
 
   return (
     <header className="border-b bg-card shrink-0">
@@ -57,10 +83,15 @@ export function ChatHeader({
           {avatarFallback ? (
             avatarFallback
           ) : (
-            <Avatar className="h-10 w-10 border border-border shrink-0">
-              <AvatarImage src={avatarUrl || undefined} alt={title} />
-              <AvatarFallback>{title[0]?.toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <div className="relative shrink-0">
+              <Avatar className="h-10 w-10 border border-border">
+                <AvatarImage src={avatarUrl || undefined} alt={title} />
+                <AvatarFallback>{title[0]?.toUpperCase()}</AvatarFallback>
+              </Avatar>
+              {showOnlineDot && (
+                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 ring-2 ring-card" />
+              )}
+            </div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -78,8 +109,16 @@ export function ChatHeader({
                 </button>
               )}
             </div>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>
+            {presenceSubtitle && (
+              <p className={cn(
+                'text-xs mt-1 truncate',
+                showOnlineDot ? 'text-green-500 font-medium' : 'text-muted-foreground'
+              )}>
+                {showOnlineDot && (
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 mr-1 mb-px" />
+                )}
+                {presenceSubtitle}
+              </p>
             )}
           </div>
         </button>

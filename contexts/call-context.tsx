@@ -16,6 +16,7 @@ import type { ActiveCallState, CallMediaType, CallRoomType, CallSession } from '
 import { IncomingCallDialog } from '@/components/call/incoming-call-dialog'
 import { CallOverlay } from '@/components/call/call-overlay'
 import { startRingtone, type RingtoneHandle } from '@/lib/ringtone'
+import { useTranslations } from 'next-intl'
 
 interface StartCallParams {
   roomType: CallRoomType
@@ -38,6 +39,7 @@ interface CallContextType {
 const CallContext = createContext<CallContextType | undefined>(undefined)
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('call')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null)
   const [incomingCall, setIncomingCall] = useState<CallSession | null>(null)
@@ -46,6 +48,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [isJoining, setIsJoining] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
   const [roomActiveCall, setRoomActiveCall] = useState<CallSession | null>(null)
+  const [currentUserName, setCurrentUserName] = useState('')
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null)
 
   const activeCallRef = useRef<ActiveCallState | null>(null)
   const incomingCallRef = useRef<CallSession | null>(null)
@@ -66,8 +70,18 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id)
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        setCurrentUserId(user.id)
+        // Fetch current user info for avatar in video call
+        const { data } = await supabase
+          .from('users')
+          .select('username, avatar_url')
+          .eq('id', user.id)
+          .single()
+        setCurrentUserName(data?.username || 'You')
+        setCurrentUserAvatar(data?.avatar_url || null)
+      }
     })
   }, [])
 
@@ -79,7 +93,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       .eq('id', callerId)
       .single()
     return {
-      name: data?.username || 'Người gọi',
+      name: data?.username || t('unknownCaller'),
       avatar: data?.avatar_url || null,
     }
   }, [])
@@ -94,7 +108,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         if (session.status === 'ended' || session.status === 'declined') {
           setActiveCall(null)
           toast.info(
-            session.status === 'declined' ? 'Cuộc gọi đã bị từ chối' : 'Cuộc gọi đã kết thúc'
+            session.status === 'declined' ? t('declined') : t('ended')
           )
           return
         }
@@ -117,16 +131,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           toast.info(caller.name, {
             description:
               session.call_type === 'video'
-                ? 'Cuộc gọi video đến'
-                : 'Cuộc gọi thoại đến',
+                ? t('incomingVideoToast')
+                : t('incomingAudioToast'),
             duration: 10000,
           })
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             new Notification(caller.name, {
               body:
                 session.call_type === 'video'
-                  ? 'Cuộc gọi video đến'
-                  : 'Cuộc gọi thoại đến',
+                  ? t('incomingVideoToast')
+                  : t('incomingAudioToast'),
             })
           }
         }
@@ -135,7 +149,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       if (session.status === 'declined' && session.caller_id === userId) {
         setActiveCall(null)
         setIncomingCall(null)
-        toast.info('Cuộc gọi đã bị từ chối')
+        toast.info(t('declined'))
       }
 
       if (session.status === 'ended') {
@@ -221,12 +235,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setIncomingCall(null)
 
       if (roomType === 'dm') {
-        toast.info('Đang gọi...')
+        toast.info(t('calling'))
       } else {
-        toast.info('Đã bắt đầu cuộc gọi nhóm')
+        toast.info(t('groupCallStarted'))
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Không thể bắt đầu cuộc gọi')
+      toast.error(err instanceof Error ? err.message : t('startFailed'))
     }
   }, [])
 
@@ -251,7 +265,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       })
       setIncomingCall(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Không thể tham gia cuộc gọi')
+      toast.error(err instanceof Error ? err.message : t('joinFailed'))
     } finally {
       setIsJoining(false)
     }
@@ -312,7 +326,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setActiveCall((prev) => (prev ? { ...prev, session: data.session } : prev))
       setRoomActiveCall(data.session)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Khong the chuyen loai cuoc goi')
+      toast.error(err instanceof Error ? err.message : t('switchFailed'))
     } finally {
       setIsSwitching(false)
     }
@@ -379,6 +393,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           onToggleCallType={switchCallType}
           isSwitching={isSwitching}
           onDisconnected={endCall}
+          userAvatarUrl={currentUserAvatar}
+          userName={currentUserName}
         />
       )}
     </CallContext.Provider>

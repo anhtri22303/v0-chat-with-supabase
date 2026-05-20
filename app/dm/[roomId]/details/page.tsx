@@ -9,10 +9,13 @@ import { ArrowLeft } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChatLayout } from '@/components/layout/chat-layout'
 import { useNotifications } from '@/contexts/notification-context'
+import { useTranslations } from 'next-intl'
 
 export default function DMDetailsPage() {
   const router = useRouter()
   const params = useParams()
+  const t = useTranslations('dm')
+  const tDetails = useTranslations('chatDetails')
   const roomId = params.roomId as string
   const [otherUser, setOtherUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -46,7 +49,7 @@ export default function DMDetailsPage() {
           .single()
 
         if (roomError || !roomData) {
-          setError('Room not found')
+          setError(t('roomNotFound'))
           return
         }
 
@@ -56,7 +59,7 @@ export default function DMDetailsPage() {
             : roomData.participant1
         setOtherUser(other)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load')
+        setError(err instanceof Error ? err.message : t('loadFailed'))
       } finally {
         setLoading(false)
       }
@@ -96,7 +99,7 @@ export default function DMDetailsPage() {
     return (
       <ChatLayout>
         <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-destructive">{error || 'Failed to load'}</p>
+          <p className="text-destructive">{error || t('loadFailed')}</p>
         </div>
       </ChatLayout>
     )
@@ -114,7 +117,7 @@ export default function DMDetailsPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <span className="font-semibold text-sm">Thông tin đoạn chat</span>
+            <span className="font-semibold text-sm">{tDetails('accordionInfo')}</span>
           </div>
         </header>
         <ChatDetailsContent
@@ -122,7 +125,7 @@ export default function DMDetailsPage() {
           roomType="dm"
           roomId={roomId}
           displayName={otherUser.username}
-          subtitle="Direct Message"
+          subtitle={t('directMessage')}
           avatarUrl={otherUser.avatar_url}
           otherUserId={otherUser.id}
           otherUsername={otherUser.username}

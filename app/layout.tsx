@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import './globals.css'
 import { NotificationProvider } from '@/contexts/notification-context'
+import { PresenceProvider } from '@/contexts/presence-context'
 import { CallProvider } from '@/contexts/call-context'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -48,10 +49,12 @@ export default async function RootLayout({
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
             <NotificationProvider>
-              <CallProvider>
-                {children}
-                <Toaster position="top-center" />
-              </CallProvider>
+              <PresenceProvider>
+                <CallProvider>
+                  {children}
+                  <Toaster position="top-center" />
+                </CallProvider>
+              </PresenceProvider>
             </NotificationProvider>
           </ThemeProvider>
         </NextIntlClientProvider>

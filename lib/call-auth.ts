@@ -1,7 +1,10 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+// Generic Supabase client type - works with @supabase/ssr and @supabase/supabase-js
+// Using any to match the flexible Supabase query builder chain
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClientLike = any
 
 export async function canAccessChatRoom(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   userId: string,
   roomType: 'dm' | 'club',
   roomId: string
@@ -27,7 +30,7 @@ export async function canAccessChatRoom(
 }
 
 export async function getUserDisplayName(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   userId: string
 ): Promise<string> {
   const { data } = await supabase

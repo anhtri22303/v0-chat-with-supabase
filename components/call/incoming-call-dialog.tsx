@@ -13,6 +13,7 @@ import { Phone, PhoneOff, Video } from 'lucide-react'
 import type { CallSession } from '@/lib/call-types'
 import { useEffect, useRef } from 'react'
 import { startRingtone, type RingtoneHandle } from '@/lib/ringtone'
+import { useTranslations } from 'next-intl'
 
 interface IncomingCallDialogProps {
   session: CallSession | null
@@ -33,6 +34,7 @@ export function IncomingCallDialog({
   onDecline,
   isJoining,
 }: IncomingCallDialogProps) {
+  const t = useTranslations('call')
   const ringtoneRef = useRef<RingtoneHandle | null>(null)
   const sessionId = session?.id
 
@@ -85,11 +87,11 @@ export function IncomingCallDialog({
           <DialogDescription>
             {isClub
               ? isVideo
-                ? 'Đang gọi video nhóm...'
-                : 'Đang gọi thoại nhóm...'
+                ? t('incomingGroupVideo')
+                : t('incomingGroupAudio')
               : isVideo
-                ? 'Cuộc gọi video đến...'
-                : 'Cuộc gọi thoại đến...'}
+                ? t('incomingVideo')
+                : t('incomingAudio')}
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-center gap-6 pt-4">
@@ -99,7 +101,7 @@ export function IncomingCallDialog({
             className="h-14 w-14 rounded-full"
             onClick={handleDecline}
             disabled={isJoining}
-            aria-label="Từ chối"
+            aria-label={t('decline')}
           >
             <PhoneOff className="h-6 w-6" />
           </Button>
@@ -108,7 +110,7 @@ export function IncomingCallDialog({
             className="h-14 w-14 rounded-full bg-green-600 hover:bg-green-700"
             onClick={handleAccept}
             disabled={isJoining}
-            aria-label="Chấp nhận"
+            aria-label={t('accept')}
           >
             {isVideo ? (
               <Video className="h-6 w-6" />

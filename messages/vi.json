@@ -10,7 +10,22 @@
     "help": "Trợ giúp",
     "language": "Ngôn ngữ",
     "english": "English",
-    "vietnamese": "Tiếng Việt"
+    "vietnamese": "Tiếng Việt",
+    "editAvatarAria": "Chỉnh sửa ảnh đại diện",
+    "editShort": "Sửa"
+  },
+  "profile": {
+    "editAvatar": "Chỉnh sửa ảnh đại diện",
+    "editAvatarDesc": "Chọn ảnh và căn chỉnh khung hình.",
+    "choosePhoto": "Chọn ảnh",
+    "changePhoto": "Chọn ảnh khác",
+    "zoom": "Phóng to",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "uploading": "Đang tải lên...",
+    "uploaded": "Đã cập nhật ảnh đại diện",
+    "uploadFailed": "Không thể cập nhật ảnh đại diện",
+    "invalidFile": "Vui lòng chọn ảnh JPG, PNG hoặc WebP"
   },
   "sidebar": {
     "noConversations": "Chưa có cuộc trò chuyện nào."
@@ -42,7 +57,9 @@
     "joinCall": "Tham gia cuộc gọi",
     "voiceCall": "Gọi thoại",
     "videoCall": "Gọi video",
-    "chatInfo": "Thông tin đoạn chat"
+    "chatInfo": "Thông tin đoạn chat",
+    "activeNow": "Đang hoạt động",
+    "activeAgo": "Hoạt động {time} trước"
   },
   "toasts": {
     "startConversation": "Đã bắt đầu trò chuyện với {name}",
@@ -84,7 +101,9 @@
     "pinnedCollapsed": "{count} đã ghim",
     "noMessages": "Chưa có tin nhắn nào. Hãy bắt đầu trò chuyện!",
     "placeholder": "Nhập tin nhắn... (Shift+Enter để xuống dòng)",
-    "you": "Bạn"
+    "you": "Bạn",
+    "isTyping": "đang nhập...",
+    "areTyping": "đang nhập..."
   },
   "messageInput": {
     "replyingTo": "Đang trả lời {name}",
@@ -139,6 +158,14 @@
     "accordionInfo": "Thông tin về đoạn chat",
     "accordionCustomize": "Tùy chỉnh đoạn chat",
     "customizePlaceholder": "Theme, emoji và màu bong bóng chat — Sắp có.",
+    "themePickerTitle": "Chọn chủ đề chat",
+    "themePreview": "Xem trước",
+    "changeTheme": "Thay đổi chủ đề",
+    "saveTheme": "Lưu",
+    "cancel": "Hủy",
+    "saving": "Đang lưu...",
+    "themeUpdated": "Đã cập nhật chủ đề chat",
+    "themeUpdateFailed": "Không thể cập nhật chủ đề chat",
     "mediaPanel": "File phương tiện và file",
     "mediaPage": "Media",
     "links": "Liên kết",
@@ -163,5 +190,60 @@
     "backToDashboard": "Quay lại Dashboard",
     "directMessage": "Tin nhắn trực tiếp",
     "chatInfo": "Thông tin đoạn chat"
+  },
+  "club": {
+    "notFound": "Không tìm thấy club",
+    "loadFailed": "Không thể tải club",
+    "activeCall": "Đang có cuộc gọi nhóm",
+    "memberCount": "{count} thành viên"
+  },
+  "call": {
+    "incomingGroupVideo": "Đang gọi video nhóm...",
+    "incomingGroupAudio": "Đang gọi thoại nhóm...",
+    "incomingVideo": "Cuộc gọi video đến...",
+    "incomingAudio": "Cuộc gọi thoại đến...",
+    "decline": "Từ chối",
+    "accept": "Chấp nhận",
+    "videoCall": "Cuộc gọi video",
+    "audioCall": "Cuộc gọi thoại",
+    "group": "Nhóm",
+    "direct": "Trực tiếp",
+    "switchToAudio": "Chuyển sang thoại",
+    "switchToVideo": "Chuyển sang video",
+    "endCall": "Kết thúc cuộc gọi",
+    "unknownCaller": "Người gọi",
+    "declined": "Cuộc gọi đã bị từ chối",
+    "ended": "Cuộc gọi đã kết thúc",
+    "calling": "Đang gọi...",
+    "groupCallStarted": "Đã bắt đầu cuộc gọi nhóm",
+    "startFailed": "Không thể bắt đầu cuộc gọi",
+    "joinFailed": "Không thể tham gia cuộc gọi",
+    "switchFailed": "Không thể chuyển loại cuộc gọi",
+    "incomingVideoToast": "Cuộc gọi video đến",
+    "incomingAudioToast": "Cuộc gọi thoại đến",
+    "videoConnecting": "Đang kết nối video...",
+    "missingServerUrl": "Thiếu NEXT_PUBLIC_LIVEKIT_URL trong cấu hình môi trường.",
+    "insecureContext": "Trình duyệt chỉ cho phép micro/camera trong HTTPS hoặc localhost.",
+    "turnOffCamera": "Tắt camera",
+    "turnOnCamera": "Bật camera",
+    "flipCamera": "Chuyển camera",
+    "mute": "Tắt micro",
+    "unmute": "Bật micro"
+  },
+  "notifications": {
+    "sentPhoto": "Đã gửi một ảnh",
+    "sentVideo": "Đã gửi một video",
+    "sentPhotoCaption": "[Ảnh] {caption}",
+    "sentVideoCaption": "[Video] {caption}",
+    "photoPrefix": "[Ảnh]",
+    "videoPrefix": "[Video]",
+    "directMessage": "Tin nhắn trực tiếp",
+    "groupChat": "Nhóm chat"
+  },
+  "errors": {
+    "generic": "Đã xảy ra lỗi",
+    "unauthorized": "Bạn không có quyền truy cập",
+    "notFound": "Không tìm thấy",
+    "networkError": "Lỗi mạng, vui lòng thử lại"
   }
 }

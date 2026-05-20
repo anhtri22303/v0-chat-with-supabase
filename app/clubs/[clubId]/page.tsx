@@ -13,12 +13,16 @@ import { useNotifications } from '@/contexts/notification-context'
 import { ChatLayout } from '@/components/layout/chat-layout'
 import { useIsLargeScreen } from '@/hooks/use-media-query'
 import { useCall } from '@/contexts/call-context'
+import { useTranslations } from 'next-intl'
+import { useThemeColor } from '@/components/chat/theme-picker'
 import type { ClubMemberInfo } from '@/components/chat/chat-details-content'
 
 export default function ClubChatPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
+  const t = useTranslations('club')
+  const tDm = useTranslations('dm')
   const clubId = params.clubId as string
   const highlightMessageId = searchParams.get('msg')
   const [user, setUser] = useState<any>(null)
@@ -27,11 +31,13 @@ export default function ClubChatPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [themeColor, setThemeColor] = useState('#0A7CFF')
   const isLargeScreen = useIsLargeScreen()
 
   const { markRoomAsSeen } = useNotifications()
   const { startCall, acceptCall, roomActiveCall, activeCall, refreshRoomActiveCall } =
     useCall()
+  const { getThemeForRoom } = useThemeColor()
 
   useEffect(() => {
     markRoomAsSeen(clubId)
@@ -65,11 +71,15 @@ export default function ClubChatPage() {
           .single()
 
         if (clubError || !clubData) {
-          setError('Club not found')
+          setError(t('notFound'))
           return
         }
 
         setClub(clubData)
+
+        // Fetch theme color
+        const clubTheme = await getThemeForRoom(clubId, 'club')
+        setThemeColor(clubTheme)
 
         const { data: membersData } = await supabase
           .from('club_members')
@@ -84,10 +94,10 @@ export default function ClubChatPage() {
           .eq('club_id', clubId)
 
         if (membersData) {
-          setMembers(membersData as ClubMemberInfo[])
+          setMembers(membersData as unknown as ClubMemberInfo[])
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load club')
+        setError(err instanceof Error ? err.message : t('loadFailed'))
       } finally {
         setLoading(false)
       }
@@ -155,8 +165,8 @@ export default function ClubChatPage() {
     return (
       <ChatLayout>
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <p className="text-destructive">{error || 'Failed to load club'}</p>
-          <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
+          <p className="text-destructive">{error || t('loadFailed')}</p>
+          <Button onClick={() => router.push('/dashboard')}>{tDm('backToDashboard')}</Button>
         </div>
       </ChatLayout>
     )
@@ -170,7 +180,7 @@ export default function ClubChatPage() {
             title={club.name}
             subtitle={
               showJoinBadge
-                ? 'Đang có cuộc gọi nhóm'
+                ? t('activeCall')
                 : club.description || 'Club Chat'
             }
             avatarFallback={clubAvatar}
@@ -188,6 +198,7 @@ export default function ClubChatPage() {
               roomType="club"
               currentUserId={user.id}
               highlightMessageId={highlightMessageId}
+              themeColor={themeColor}
             />
           </section>
         </div>
@@ -196,13 +207,15 @@ export default function ClubChatPage() {
             roomType="club"
             roomId={clubId}
             displayName={club.name}
-            subtitle={`${members.length} thành viên`}
+            subtitle={t('memberCount', { count: members.length })}
             description={club.description}
             avatarFallback={clubAvatarLarge}
             members={members}
             memberCount={members.length}
             onSearchSelect={handleSearchSelect}
             onClose={() => setDetailsOpen(false)}
+            themeColor={themeColor}
+            onThemeChange={setThemeColor}
           />
         )}
       </div>

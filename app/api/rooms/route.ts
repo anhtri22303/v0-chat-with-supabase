@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getTranslations } from 'next-intl/server'
 
 export async function GET() {
   const supabase = await createClient()
+  const t = await getTranslations('notifications')
 
   const {
     data: { user },
@@ -67,9 +69,9 @@ export async function GET() {
         // Helper to format preview text
         let previewText = lastMessage
           ? (lastMessage.media_type === 'image'
-              ? (lastMessage.content ? `[Photo] ${lastMessage.content}` : 'Sent a photo')
+              ? (lastMessage.content ? t('sentPhotoCaption', { caption: lastMessage.content }) : t('sentPhoto'))
               : lastMessage.media_type === 'video'
-                ? (lastMessage.content ? `[Video] ${lastMessage.content}` : 'Sent a video')
+                ? (lastMessage.content ? t('sentVideoCaption', { caption: lastMessage.content }) : t('sentVideo'))
                 : lastMessage.content || 'No messages yet')
           : 'No messages yet'
 
@@ -132,9 +134,9 @@ export async function GET() {
 
         let previewText = lastMessage
           ? (lastMessage.media_type === 'image'
-              ? (lastMessage.content ? `[Photo] ${lastMessage.content}` : 'Sent a photo')
+              ? (lastMessage.content ? t('sentPhotoCaption', { caption: lastMessage.content }) : t('sentPhoto'))
               : lastMessage.media_type === 'video'
-                ? (lastMessage.content ? `[Video] ${lastMessage.content}` : 'Sent a video')
+                ? (lastMessage.content ? t('sentVideoCaption', { caption: lastMessage.content }) : t('sentVideo'))
                 : lastMessage.content || 'No messages yet')
           : 'No messages yet'
 

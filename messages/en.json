@@ -10,7 +10,22 @@
     "help": "Help",
     "language": "Language",
     "english": "English",
-    "vietnamese": "Vietnamese"
+    "vietnamese": "Vietnamese",
+    "editAvatarAria": "Edit profile photo",
+    "editShort": "Edit"
+  },
+  "profile": {
+    "editAvatar": "Edit profile photo",
+    "editAvatarDesc": "Pick an image and adjust the framing.",
+    "choosePhoto": "Choose photo",
+    "changePhoto": "Choose another",
+    "zoom": "Zoom",
+    "save": "Save",
+    "cancel": "Cancel",
+    "uploading": "Uploading...",
+    "uploaded": "Profile photo updated",
+    "uploadFailed": "Failed to update profile photo",
+    "invalidFile": "Please select a JPG, PNG or WebP image"
   },
   "sidebar": {
     "noConversations": "No conversations yet."
@@ -42,7 +57,9 @@
     "joinCall": "Join call",
     "voiceCall": "Voice call",
     "videoCall": "Video call",
-    "chatInfo": "Chat info"
+    "chatInfo": "Chat info",
+    "activeNow": "Active now",
+    "activeAgo": "Active {time} ago"
   },
   "toasts": {
     "startConversation": "Started conversation with {name}",
@@ -84,7 +101,9 @@
     "pinnedCollapsed": "{count} pinned",
     "noMessages": "No messages yet. Start a conversation!",
     "placeholder": "Type a message... (Shift+Enter for new line)",
-    "you": "You"
+    "you": "You",
+    "isTyping": "is typing...",
+    "areTyping": "are typing..."
   },
   "messageInput": {
     "replyingTo": "Replying to {name}",
@@ -139,6 +158,14 @@
     "accordionInfo": "Chat info",
     "accordionCustomize": "Customize chat",
     "customizePlaceholder": "Theme, emoji and chat bubble color — Coming soon.",
+    "themePickerTitle": "Choose chat theme",
+    "themePreview": "Preview",
+    "changeTheme": "Change theme",
+    "saveTheme": "Save",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "themeUpdated": "Chat theme updated",
+    "themeUpdateFailed": "Failed to update chat theme",
     "mediaPanel": "Media and files",
     "mediaPage": "Media",
     "links": "Links",
@@ -163,5 +190,60 @@
     "backToDashboard": "Back to Dashboard",
     "directMessage": "Direct Message",
     "chatInfo": "Chat info"
+  },
+  "club": {
+    "notFound": "Club not found",
+    "loadFailed": "Failed to load club",
+    "activeCall": "Group call in progress",
+    "memberCount": "{count, plural, one {# member} other {# members}}"
+  },
+  "call": {
+    "incomingGroupVideo": "Incoming group video call...",
+    "incomingGroupAudio": "Incoming group voice call...",
+    "incomingVideo": "Incoming video call...",
+    "incomingAudio": "Incoming voice call...",
+    "decline": "Decline",
+    "accept": "Accept",
+    "videoCall": "Video call",
+    "audioCall": "Voice call",
+    "group": "Group",
+    "direct": "Direct",
+    "switchToAudio": "Switch to voice",
+    "switchToVideo": "Switch to video",
+    "endCall": "End call",
+    "unknownCaller": "Unknown caller",
+    "declined": "Call was declined",
+    "ended": "Call ended",
+    "calling": "Calling...",
+    "groupCallStarted": "Group call started",
+    "startFailed": "Failed to start call",
+    "joinFailed": "Failed to join call",
+    "switchFailed": "Failed to switch call type",
+    "incomingVideoToast": "Incoming video call",
+    "incomingAudioToast": "Incoming voice call",
+    "videoConnecting": "Connecting video...",
+    "missingServerUrl": "Missing NEXT_PUBLIC_LIVEKIT_URL in environment configuration.",
+    "insecureContext": "Browser only allows microphone/camera in HTTPS or localhost.",
+    "turnOffCamera": "Turn off camera",
+    "turnOnCamera": "Turn on camera",
+    "flipCamera": "Flip camera",
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "notifications": {
+    "sentPhoto": "Sent a photo",
+    "sentVideo": "Sent a video",
+    "sentPhotoCaption": "[Photo] {caption}",
+    "sentVideoCaption": "[Video] {caption}",
+    "photoPrefix": "[Photo]",
+    "videoPrefix": "[Video]",
+    "directMessage": "Direct Message",
+    "groupChat": "Group Chat"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "unauthorized": "You are not authorized",
+    "notFound": "Not found",
+    "networkError": "Network error, please try again"
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { attachReads, fetchReadsByMessageIds } from '@/lib/message-reads'
 
 export async function GET(
   request: NextRequest,
@@ -76,8 +77,16 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  const ordered = data?.reverse() || []
+  const readsMap = await fetchReadsByMessageIds(
+    supabase,
+    'dm',
+    ordered.map((m: any) => m.id),
+    user.id
+  )
+
   return NextResponse.json({
-    messages: data?.reverse() || [],
+    messages: attachReads(ordered, readsMap),
     timestamp: new Date().toISOString(),
   })
 }
@@ -111,13 +120,45 @@ export async function POST(
   }
 
   const body = await request.json()
-  const { content, replyToMessageId, mediaUrl, mediaType } = body
+  const { content, replyToMessageId, mediaUrl, mediaType, clientMessageId } = body
 
   if ((!content || typeof content !== 'string' || content.trim().length === 0) && !mediaUrl) {
     return NextResponse.json(
       { error: 'Content or media is required' },
       { status: 400 }
     )
+  }
+
+  // Idempotency check: if clientMessageId exists, return existing message
+  if (clientMessageId) {
+    const { data: existingMessage } = await supabase
+      .from('dm_messages')
+      .select(
+        `
+        id,
+        content,
+        media_url,
+        media_type,
+        user_id,
+        created_at,
+        users:user_id(username, avatar_url),
+        dm_message_reactions(emoji, user_id),
+        dm_message_replies:dm_message_replies!dm_message_replies_message_id_fkey(
+          id,
+          reply_to_message_id,
+          user_id,
+          content,
+          created_at
+        )
+      `
+      )
+      .eq('client_message_id', clientMessageId)
+      .single()
+
+    if (existingMessage) {
+      console.log(`[Idempotency] Returning existing message for clientMessageId: ${clientMessageId}`)
+      return NextResponse.json(existingMessage, { status: 200 })
+    }
   }
 
   const insertData: Record<string, string> = {
@@ -127,6 +168,7 @@ export async function POST(
   }
   if (mediaUrl) insertData.media_url = mediaUrl
   if (mediaType) insertData.media_type = mediaType
+  if (clientMessageId) insertData.client_message_id = clientMessageId
 
   const { data, error } = await supabase
     .from('dm_messages')

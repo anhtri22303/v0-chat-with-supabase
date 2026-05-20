@@ -32,6 +32,7 @@ import { MediaPreviewGrid } from './media-preview-grid'
 import { MediaGallery } from './media-gallery'
 import { ChatSearchDialog } from './chat-search-dialog'
 import { CreateGroupModal } from '@/components/home/create-group-modal'
+import { ThemePicker, useThemeColor } from './theme-picker'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCall } from '@/contexts/call-context'
@@ -70,6 +71,8 @@ export interface ChatDetailsContentProps {
   onSearchSelect?: (messageId: string) => void
   onBack?: () => void
   enableCalls?: boolean
+  themeColor?: string
+  onThemeChange?: (color: string) => void
 }
 
 export function ChatDetailsContent({
@@ -88,13 +91,17 @@ export function ChatDetailsContent({
   dmRoomsForGroup = [],
   onSearchSelect,
   enableCalls = true,
+  themeColor = '#0A7CFF',
+  onThemeChange,
 }: ChatDetailsContentProps) {
   const t = useTranslations('chatDetails')
   const { startCall } = useCall()
+  const { updateThemeForRoom } = useThemeColor()
   const [muted, setMuted] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [links, setLinks] = useState<string[]>([])
   const [mediaAccordion, setMediaAccordion] = useState<string | undefined>()
+  const [themePickerOpen, setThemePickerOpen] = useState(false)
 
   const apiBase = roomType === 'dm' ? `/api/dm/rooms/${roomId}` : `/api/club/${roomId}`
 
@@ -170,7 +177,7 @@ export function ChatDetailsContent({
     {
       icon: Palette,
       label: t('quickCustomize'),
-      onClick: () => handlePlaceholder(t('quickCustomize')),
+      onClick: () => setThemePickerOpen(true),
     },
     roomType === 'dm'
       ? {
@@ -323,9 +330,17 @@ export function ChatDetailsContent({
             <AccordionItem value="customize">
               <AccordionTrigger>{t('accordionCustomize')}</AccordionTrigger>
               <AccordionContent>
-                <p className="text-sm text-muted-foreground">
-                  {t('customizePlaceholder')}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setThemePickerOpen(true)}
+                  className="flex items-center gap-3 w-full p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <div
+                    className="w-8 h-8 rounded-full"
+                    style={{ backgroundColor: themeColor }}
+                  />
+                  <span className="text-sm">{t('changeTheme')}</span>
+                </button>
               </AccordionContent>
             </AccordionItem>
           </>
@@ -442,6 +457,21 @@ export function ChatDetailsContent({
         roomType={roomType}
         roomId={roomId}
         onSelectMessage={(id) => onSearchSelect?.(id)}
+      />
+
+      <ThemePicker
+        currentColor={themeColor}
+        onSelect={async (color) => {
+          const success = await updateThemeForRoom(roomId, roomType, color)
+          if (success) {
+            onThemeChange?.(color)
+            toast.success(t('themeUpdated'))
+          } else {
+            toast.error(t('themeUpdateFailed'))
+          }
+        }}
+        open={themePickerOpen}
+        onOpenChange={setThemePickerOpen}
       />
     </div>
   )

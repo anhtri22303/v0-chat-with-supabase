@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Users } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChatLayout } from '@/components/layout/chat-layout'
+import { useTranslations } from 'next-intl'
 
 export default function ClubDetailsPage() {
   const router = useRouter()
   const params = useParams()
+  const t = useTranslations('club')
+  const tDetails = useTranslations('chatDetails')
   const clubId = params.clubId as string
   const [club, setClub] = useState<any>(null)
   const [members, setMembers] = useState<ClubMemberInfo[]>([])
@@ -37,7 +40,7 @@ export default function ClubDetailsPage() {
           .single()
 
         if (clubError || !clubData) {
-          setError('Club not found')
+          setError(t('notFound'))
           return
         }
 
@@ -56,10 +59,10 @@ export default function ClubDetailsPage() {
           .eq('club_id', clubId)
 
         if (membersData) {
-          setMembers(membersData as ClubMemberInfo[])
+          setMembers(membersData as unknown as ClubMemberInfo[])
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load')
+        setError(err instanceof Error ? err.message : t('loadFailed'))
       } finally {
         setLoading(false)
       }
@@ -95,7 +98,7 @@ export default function ClubDetailsPage() {
     return (
       <ChatLayout>
         <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-destructive">{error || 'Failed to load'}</p>
+          <p className="text-destructive">{error || t('loadFailed')}</p>
         </div>
       </ChatLayout>
     )
@@ -113,7 +116,7 @@ export default function ClubDetailsPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <span className="font-semibold text-sm">Thông tin đoạn chat</span>
+            <span className="font-semibold text-sm">{tDetails('accordionInfo')}</span>
           </div>
         </header>
         <ChatDetailsContent
@@ -121,7 +124,7 @@ export default function ClubDetailsPage() {
           roomType="club"
           roomId={clubId}
           displayName={club.name}
-          subtitle={`${members.length} thành viên`}
+          subtitle={t('memberCount', { count: members.length })}
           description={club.description}
           avatarFallback={clubAvatarLarge}
           members={members}

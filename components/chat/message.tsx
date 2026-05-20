@@ -16,7 +16,7 @@ import {
   DialogContent,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Trash2, SmilePlus, Reply, MoreVertical, Pin, PinOff } from 'lucide-react'
+import { Trash2, SmilePlus, Reply, MoreVertical, Pin, PinOff, Loader2, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { enUS, vi } from 'date-fns/locale'
 import { useState, useCallback, useRef, useEffect } from 'react'
@@ -52,6 +52,16 @@ export interface MessageData {
   // Media attachment
   media_url?: string
   media_type?: 'image' | 'video'
+  // Read receipts (other users who have read this message)
+  reads?: Array<{
+    user_id: string
+    read_at: string
+    users: { username: string; avatar_url: string | null } | null
+  }>
+  // Offline-first message status
+  status?: 'pending' | 'sent' | 'failed' | 'delivered'
+  // Client-generated UUID for idempotency
+  client_message_id?: string
 }
 
 interface MessageProps {
@@ -63,6 +73,11 @@ interface MessageProps {
   onReply?: (message: MessageData) => void
   onPin?: (message: MessageData) => void
   onUnpin?: (messageId: string) => void
+  onRetry?: (clientMessageId: string) => void
+  /** User IDs whose receipts to render under this message (computed by parent for dedupe) */
+  readerIdsToRender?: string[]
+  /** Theme color for own messages (Messenger-style) */
+  themeColor?: string
 }
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
@@ -99,6 +114,9 @@ export function Message({
   onReply,
   onPin,
   onUnpin,
+  onRetry,
+  readerIdsToRender,
+  themeColor = '#0A7CFF',
 }: MessageProps) {
   const t = useTranslations('message')
   const locale = useLocale()
@@ -236,10 +254,14 @@ export function Message({
               'text-[15px] break-words shadow-sm relative',
               message.media_url ? 'rounded-2xl overflow-hidden' : 'px-4 py-2.5',
               isOwn
-                ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
+                ? 'rounded-2xl rounded-tr-sm'
                 : 'bg-accent/50 text-foreground rounded-2xl rounded-tl-sm',
               message.is_pinned && 'ring-1 ring-amber-500/30'
             )}
+            style={isOwn ? {
+              backgroundColor: themeColor,
+              color: '#ffffff',
+            } : undefined}
           >
             {/* Media content */}
             {message.media_url && message.media_type === 'image' && (
@@ -390,9 +412,69 @@ export function Message({
             <span className="text-[10px] text-muted-foreground/70">
               {formatDistanceToNow(new Date(message.created_at), { addSuffix: true, locale: timeLocale })}
             </span>
+            {/* Message status indicator */}
+            {message.status === 'pending' && (
+              <span className="text-[10px] text-amber-500 animate-pulse flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Sending...
+              </span>
+            )}
+            {message.status === 'failed' && (
+              <button
+                onClick={() => message.client_message_id && onRetry?.(message.client_message_id)}
+                className="text-[10px] text-destructive flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <X className="h-3 w-3" />
+                Failed - Retry
+              </button>
+            )}
+            {message.status === 'sent' && (
+              <span className="text-[10px] text-green-500">✓</span>
+            )}
           </div>
         )}
+
+        {/* Read receipts (Messenger-style avatar stack) */}
+        {isOwn && readerIdsToRender && readerIdsToRender.length > 0 && (
+          <ReadReceiptStack
+            reads={(message.reads || []).filter((r) => readerIdsToRender.includes(r.user_id))}
+          />
+        )}
       </div>
+    </div>
+  )
+}
+
+function ReadReceiptStack({
+  reads,
+}: {
+  reads: Array<{
+    user_id: string
+    read_at: string
+    users: { username: string; avatar_url: string | null } | null
+  }>
+}) {
+  if (!reads || reads.length === 0) return null
+  const visible = reads.slice(0, 3)
+  const overflow = reads.length - visible.length
+  const tooltip = reads
+    .map((r) => r.users?.username || '')
+    .filter(Boolean)
+    .join(', ')
+
+  return (
+    <div className="flex justify-end items-center gap-0.5 px-1 mt-0.5" title={tooltip}>
+      {visible.map((r) => (
+        <Avatar key={r.user_id} className="h-4 w-4 border border-background">
+          <AvatarImage src={r.users?.avatar_url || undefined} alt={r.users?.username || ''} />
+          <AvatarFallback className="text-[8px]">
+            {(r.users?.username || '?')[0]?.toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+      ))}
+      {overflow > 0 && (
+        <span className="text-[9px] text-muted-foreground ml-0.5">+{overflow}</span>
+      )}
     </div>
   )
 }

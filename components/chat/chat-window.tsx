@@ -9,6 +9,30 @@ import { createClient } from '@/lib/supabase/client'
 import { Pin, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  cacheMessages,
+  getCachedMessages,
+  updateLastSync,
+  addPendingMessage,
+  updateMessageStatus,
+  getPendingMessages,
+  type MessageStatus,
+} from '@/lib/message-cache'
+import { subscribeToTyping, sendTypingBroadcast } from '@/lib/typing-broadcast'
+import { getMessageQueueWorker } from '@/lib/message-queue'
+
+// Generate UUID using native crypto API
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  // Fallback for older browsers
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
 
 interface ChatWindowProps {
   roomId: string
@@ -16,6 +40,7 @@ interface ChatWindowProps {
   currentUserId: string
   highlightMessageId?: string | null
   onLoadMessages?: (messages: MessageData[]) => void
+  themeColor?: string
 }
 
 /** Normalize Supabase relation names to the generic names used by Message component */
@@ -32,7 +57,39 @@ function normalizeMessage(msg: any): MessageData {
       msg.dm_message_replies ||
       msg.club_message_replies ||
       [],
+    reads: msg.reads || [],
   }
+}
+
+/**
+ * Merge a single read receipt into the messages list (used for realtime
+ * INSERTs from Supabase or polling deltas).
+ */
+function applyRead(
+  messages: MessageData[],
+  read: {
+    message_id: string
+    user_id: string
+    read_at: string
+    users?: { username: string; avatar_url: string | null } | null
+  }
+): MessageData[] {
+  return messages.map((m) => {
+    if (m.id !== read.message_id) return m
+    const existing = m.reads || []
+    if (existing.some((r) => r.user_id === read.user_id)) return m
+    return {
+      ...m,
+      reads: [
+        ...existing,
+        {
+          user_id: read.user_id,
+          read_at: read.read_at,
+          users: read.users || null,
+        },
+      ],
+    }
+  })
 }
 
 function normalizeMessages(messages: any[]): MessageData[] {
@@ -112,6 +169,7 @@ export function ChatWindow({
   currentUserId,
   highlightMessageId,
   onLoadMessages,
+  themeColor = '#0A7CFF',
 }: ChatWindowProps) {
   const t = useTranslations('chatWindow')
   const [messages, setMessages] = useState<MessageData[]>([])
@@ -128,6 +186,36 @@ export function ChatWindow({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
   const apiBase = roomType === 'club' ? `/api/club/${roomId}` : `/api/dm/rooms/${roomId}`
+  const lastReadMessageIdRef = useRef<string | null>(null)
+  const readDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const typingUnsubscribeRef = useRef<(() => void) | null>(null)
+  const [typingUsers, setTypingUsers] = useState<Map<string, { username: string; timestamp: number }>>(new Map())
+  const typingDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [currentUserInfo, setCurrentUserInfo] = useState<{ username: string } | null>(null)
+
+  // Load current user info on mount
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const supabase = createClient()
+      const { data } = await supabase.from('users').select('username').eq('id', currentUserId).single()
+      if (data) {
+        setCurrentUserInfo(data)
+      }
+    }
+    if (currentUserId) {
+      fetchUserInfo()
+    }
+  }, [currentUserId])
+
+  // Handle typing broadcast
+  const handleTyping = useCallback(
+    async (isTyping: boolean) => {
+      if (!currentUserInfo?.username) return
+      const supabase = createClient()
+      await sendTypingBroadcast(roomId, roomType, currentUserId, currentUserInfo.username, isTyping, supabase)
+    },
+    [roomId, roomType, currentUserId, currentUserInfo]
+  )
 
   // Load pinned IDs from localStorage on mount
   useEffect(() => {
@@ -143,18 +231,66 @@ export function ChatWindow({
   // Get the pinned messages for banner display
   const pinnedMessages = messagesWithPinState.filter((m) => m.is_pinned)
 
-  // Initial load
+  /**
+   * Compute which reader avatars to render under each message.
+   * Messenger semantics: each reader appears only under the *latest* own
+   * message they have read. Walk messages from newest to oldest, claim
+   * each reader on the first own-message we encounter that has them.
+   */
+  const readerIdsByMessage: Record<string, string[]> = {}
+  {
+    const claimed = new Set<string>()
+    for (let i = messagesWithPinState.length - 1; i >= 0; i--) {
+      const m = messagesWithPinState[i]
+      if (m.user_id !== currentUserId) continue
+      const ids: string[] = []
+      for (const r of m.reads || []) {
+        if (claimed.has(r.user_id)) continue
+        claimed.add(r.user_id)
+        ids.push(r.user_id)
+      }
+      if (ids.length > 0) readerIdsByMessage[m.id] = ids
+    }
+  }
+
+  // Initial load with cache-first strategy
   useEffect(() => {
     const loadInitialMessages = async () => {
       try {
         setIsLoading(true)
+
+        // Try to load from IndexedDB cache first
+        const { messages: cachedMessages, lastSyncAt } = await getCachedMessages(roomId, roomType)
+
+        if (cachedMessages.length > 0) {
+          // Show cached messages immediately
+          const normalized = normalizeMessages(cachedMessages)
+          setMessages(enrichWithReplyTo(normalized))
+          if (lastSyncAt) {
+            lastPollTimeRef.current = lastSyncAt
+          }
+          setIsLoading(false) // Hide skeleton early
+        }
+
+        // Sync with server for any new messages
         const response = await fetch(`${apiBase}/messages?limit=50`)
         if (!response.ok) throw new Error(t('loadFailed'))
 
         const data = await response.json()
         const normalized = normalizeMessages(data.messages)
-        setMessages(enrichWithReplyTo(normalized))
-        lastPollTimeRef.current = data.timestamp
+        const enriched = enrichWithReplyTo(normalized)
+
+        // Merge with existing messages
+        setMessages((prev) => mergeMessages(prev, enriched))
+
+        // Update cache and sync timestamp
+        if (data.messages && data.messages.length > 0) {
+          await cacheMessages(roomId, roomType, data.messages)
+          const lastMsg = data.messages[data.messages.length - 1]
+          await updateLastSync(roomId, roomType, lastMsg.created_at)
+          lastPollTimeRef.current = data.timestamp
+        }
+
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : t('loadFailed'))
@@ -164,7 +300,7 @@ export function ChatWindow({
     }
 
     loadInitialMessages()
-  }, [roomId, apiBase])
+  }, [roomId, apiBase, roomType, t])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -201,11 +337,21 @@ export function ChatWindow({
             if (data.messages && data.messages.length > 0) {
               setMessages((prev) => mergeMessages(prev, data.messages))
               lastPollTimeRef.current = data.timestamp
+              // Cache new messages
+              await cacheMessages(roomId, roomType, data.messages)
+              await updateLastSync(roomId, roomType, data.timestamp)
             }
             // Remove deleted messages
             if (data.deleted_ids && data.deleted_ids.length > 0) {
               const deletedSet = new Set(data.deleted_ids)
               setMessages((prev) => prev.filter((m) => !deletedSet.has(m.id)))
+            }
+            if (data.reads && data.reads.length > 0) {
+              setMessages((prev) => {
+                let next = prev
+                for (const r of data.reads) next = applyRead(next, r)
+                return next
+              })
             }
           } catch (err) {
             console.error('Realtime fetch error:', err)
@@ -230,12 +376,76 @@ export function ChatWindow({
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reads',
+          filter: `room_id=eq.${roomId}`,
+        },
+        async (payload: any) => {
+          const row = payload.new
+          if (!row?.message_id || !row?.user_id) return
+          if (row.user_id === currentUserId) return
+          // Fetch reader's profile for avatar (best-effort)
+          let users: { username: string; avatar_url: string | null } | null = null
+          try {
+            const { data } = await supabase
+              .from('users')
+              .select('username, avatar_url')
+              .eq('id', row.user_id)
+              .single()
+            if (data) users = data as any
+          } catch {
+            // ignore
+          }
+          setMessages((prev) =>
+            applyRead(prev, {
+              message_id: row.message_id,
+              user_id: row.user_id,
+              read_at: row.read_at,
+              users,
+            })
+          )
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [roomId, roomType, apiBase])
+  }, [roomId, roomType, apiBase, currentUserId])
+
+  // Broadcast-based typing indicator subscription
+  useEffect(() => {
+    const supabase = createClient()
+
+    // Subscribe to typing broadcasts
+    typingUnsubscribeRef.current = subscribeToTyping(
+      roomId,
+      roomType,
+      supabase,
+      (state) => {
+        setTypingUsers((prev) => {
+          const next = new Map(prev)
+          if (state.isTyping) {
+            next.set(state.userId, { username: state.username, timestamp: state.timestamp })
+          } else {
+            next.delete(state.userId)
+          }
+          return next
+        })
+      }
+    )
+
+    return () => {
+      if (typingUnsubscribeRef.current) {
+        typingUnsubscribeRef.current()
+        typingUnsubscribeRef.current = null
+      }
+    }
+  }, [roomId, roomType])
 
   // Fallback polling every 15 seconds
   useEffect(() => {
@@ -254,6 +464,14 @@ export function ChatWindow({
           const deletedSet = new Set(data.deleted_ids)
           setMessages((prev) => prev.filter((m) => !deletedSet.has(m.id)))
         }
+        // Apply incremental read receipts
+        if (data.reads && data.reads.length > 0) {
+          setMessages((prev) => {
+            let next = prev
+            for (const r of data.reads) next = applyRead(next, r)
+            return next
+          })
+        }
       } catch (err) {
         console.error('Polling error:', err)
       }
@@ -268,19 +486,70 @@ export function ChatWindow({
     }
   }, [apiBase])
 
+  /**
+   * Mark the latest visible message as read whenever messages list updates,
+   * the user is near the bottom, and the document is visible. Debounced.
+   */
+  useEffect(() => {
+    if (!currentUserId || messages.length === 0) return
+    if (typeof document !== 'undefined' && document.hidden) return
+    if (!shouldAutoScroll) return
+
+    // Find the last message NOT authored by the current user
+    let target: MessageData | null = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].user_id !== currentUserId && !messages[i].id.startsWith('temp-')) {
+        target = messages[i]
+        break
+      }
+    }
+    if (!target) return
+    if (lastReadMessageIdRef.current === target.id) return
+    const messageId = target.id
+
+    if (readDebounceRef.current) clearTimeout(readDebounceRef.current)
+    readDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${apiBase}/read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId }),
+        })
+        if (res.ok) {
+          lastReadMessageIdRef.current = messageId
+        }
+      } catch (err) {
+        console.error('Mark-as-read failed:', err)
+      }
+    }, 600)
+
+    return () => {
+      if (readDebounceRef.current) clearTimeout(readDebounceRef.current)
+    }
+  }, [messages, shouldAutoScroll, currentUserId, apiBase])
+
   const handleSendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, username?: string) => {
       const trimmed = content.trim()
       if (!trimmed) return
 
-      // Optimistic: show message instantly
-      const tempId = `temp-${Date.now()}`
+      // Broadcast stop typing
+      if (username) {
+        const supabase = createClient()
+        await sendTypingBroadcast(roomId, roomType, currentUserId, username, false, supabase)
+      }
+
+      // Generate client-side UUID for idempotency
+      const clientMessageId = generateUUID()
+      const tempId = `temp-${clientMessageId}`
+
+      // Offline-first: show message instantly with "pending" status
       const optimisticMsg: MessageData = {
         id: tempId,
         content: trimmed,
         user_id: currentUserId,
         created_at: new Date().toISOString(),
-        users: { username: t('you') },
+        users: { username: username || t('you') },
         reactions: [],
         replies: [],
         reply_to: replyingTo ? {
@@ -289,6 +558,8 @@ export function ChatWindow({
           user_id: replyingTo.user_id,
           users: replyingTo.users,
         } : null,
+        status: 'pending' as MessageStatus,
+        client_message_id: clientMessageId,
       }
 
       setMessages((prev) => [...prev, optimisticMsg])
@@ -296,40 +567,99 @@ export function ChatWindow({
       setReplyingTo(null)
       setError(null)
 
-      try {
-        const body: Record<string, string> = { content: trimmed }
-        if (replyingTo) {
-          body.replyToMessageId = replyingTo.id
-        }
+      // Add to pending queue for background retry
+      await addPendingMessage(
+        clientMessageId,
+        roomId,
+        roomType,
+        trimmed,
+        replyingTo?.id,
+        undefined,
+        undefined
+      )
 
-        const response = await fetch(`${apiBase}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
+      // Cache the pending message
+      await cacheMessages(roomId, roomType, [optimisticMsg])
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || t('sendFailed'))
-        }
+      // Start the message queue worker if not already running
+      const worker = getMessageQueueWorker({
+        onMessageSent: async (sentClientId, serverMessage) => {
+          if (sentClientId === clientMessageId) {
+            // Replace temp message with server message
+            const normalized = normalizeMessage(serverMessage)
+            setMessages((prev) =>
+              mergeMessages(
+                prev.filter((m) => m.id !== tempId),
+                [{ ...normalized, status: 'sent' as MessageStatus }]
+              )
+            )
+            // Update cache with sent status
+            await cacheMessages(roomId, roomType, [{ ...normalized, status: 'sent' }])
+            await updateLastSync(roomId, roomType, serverMessage.created_at)
+          }
+        },
+        onMessageFailed: async (failedClientId) => {
+          if (failedClientId === clientMessageId) {
+            // Mark as failed in UI
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === tempId ? { ...m, status: 'failed' as MessageStatus } : m
+              )
+            )
+            await updateMessageStatus(tempId, 'failed')
+          }
+        },
+      })
+      worker.start()
 
-        const newMessage = await response.json()
-        // Replace optimistic message with real one
-        setMessages((prev) =>
-          mergeMessages(
-            prev.filter((m) => m.id !== tempId),
-            [normalizeMessage(newMessage)]
+      // If online, try sending immediately
+      if (navigator.onLine) {
+        try {
+          const body: Record<string, string> = {
+            content: trimmed,
+            clientMessageId,
+          }
+          if (replyingTo) {
+            body.replyToMessageId = replyingTo.id
+          }
+
+          const response = await fetch(`${apiBase}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+
+          if (!response.ok) {
+            // Will be handled by retry queue
+            console.log('Message will be retried:', clientMessageId)
+            return
+          }
+
+          const newMessage = await response.json()
+          const normalized = normalizeMessage(newMessage)
+
+          // Remove from pending queue
+          const { removePendingMessage } = await import('@/lib/message-cache')
+          await removePendingMessage(clientMessageId)
+
+          // Update UI with sent message
+          setMessages((prev) =>
+            mergeMessages(
+              prev.filter((m) => m.id !== tempId),
+              [{ ...normalized, status: 'sent' as MessageStatus }]
+            )
           )
-        )
-        lastPollTimeRef.current = new Date().toISOString()
-      } catch (err) {
-        // Remove optimistic message on failure
-        setMessages((prev) => prev.filter((m) => m.id !== tempId))
-        setError(err instanceof Error ? err.message : t('sendFailed'))
-        throw err
+
+          // Cache with sent status
+          await cacheMessages(roomId, roomType, [{ ...normalized, status: 'sent' }])
+          await updateLastSync(roomId, roomType, newMessage.created_at)
+        } catch (err) {
+          // Network error - message stays in queue for retry
+          console.log('Network error, message queued for retry:', clientMessageId)
+        }
       }
     },
-    [apiBase, replyingTo, currentUserId, t]
+    [apiBase, replyingTo, currentUserId, t, roomId, roomType]
   )
 
   const handleSendMedia = useCallback(
@@ -414,6 +744,85 @@ export function ChatWindow({
       }
     },
     [apiBase, roomId, t]
+  )
+
+  const handleRetry = useCallback(
+    async (clientMessageId: string) => {
+      // Find the failed message
+      const failedMessage = messages.find(
+        (m) => m.client_message_id === clientMessageId && m.status === 'failed'
+      )
+      if (!failedMessage) return
+
+      // Update status to pending
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.client_message_id === clientMessageId ? { ...m, status: 'pending' as MessageStatus } : m
+        )
+      )
+
+      // Trigger the message queue worker
+      const worker = getMessageQueueWorker({
+        onMessageSent: async (sentClientId, serverMessage) => {
+          if (sentClientId === clientMessageId) {
+            const normalized = normalizeMessage(serverMessage)
+            setMessages((prev) =>
+              mergeMessages(
+                prev.filter((m) => m.client_message_id !== clientMessageId),
+                [{ ...normalized, status: 'sent' as MessageStatus }]
+              )
+            )
+            await cacheMessages(roomId, roomType, [{ ...normalized, status: 'sent' }])
+          }
+        },
+        onMessageFailed: async (failedClientId) => {
+          if (failedClientId === clientMessageId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.client_message_id === clientMessageId
+                  ? { ...m, status: 'failed' as MessageStatus }
+                  : m
+              )
+            )
+          }
+        },
+      })
+      worker.start()
+
+      // If online, try sending immediately
+      if (navigator.onLine && failedMessage.content) {
+        try {
+          const body: Record<string, string> = {
+            content: failedMessage.content,
+            clientMessageId,
+          }
+          if (failedMessage.reply_to?.id) {
+            body.replyToMessageId = failedMessage.reply_to.id
+          }
+
+          const response = await fetch(`${apiBase}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+
+          if (response.ok) {
+            const newMessage = await response.json()
+            const normalized = normalizeMessage(newMessage)
+            setMessages((prev) =>
+              mergeMessages(
+                prev.filter((m) => m.client_message_id !== clientMessageId),
+                [{ ...normalized, status: 'sent' as MessageStatus }]
+              )
+            )
+            await cacheMessages(roomId, roomType, [{ ...normalized, status: 'sent' }])
+          }
+        } catch {
+          // Network error - will be handled by queue
+        }
+      }
+    },
+    [apiBase, messages, roomId, roomType]
   )
 
   const handleReact = useCallback(
@@ -594,6 +1003,9 @@ export function ChatWindow({
                 onReply={handleReply}
                 onPin={handlePin}
                 onUnpin={handleUnpin}
+                onRetry={handleRetry}
+                readerIdsToRender={readerIdsByMessage[message.id]}
+                themeColor={themeColor}
               />
             </div>
           ))
@@ -601,10 +1013,24 @@ export function ChatWindow({
         <div ref={messagesEndRef} className="h-2" />
       </div>
 
+      {/* Typing indicator */}
+      {typingUsers.size > 0 && (
+        <div className="px-4 py-1 text-xs text-muted-foreground flex items-center gap-1">
+          <span className="animate-pulse">●</span>
+          <span>
+            {Array.from(typingUsers.values())
+              .map((u) => u.username)
+              .join(', ')}{' '}
+            {typingUsers.size === 1 ? t('isTyping') : t('areTyping')}
+          </span>
+        </div>
+      )}
+
       <div className="border-t p-3 md:p-4 bg-background">
         <MessageInput
-          onSend={handleSendMessage}
+          onSend={(content) => handleSendMessage(content, currentUserInfo?.username)}
           onSendMedia={handleSendMedia}
+          onTyping={handleTyping}
           disabled={false}
           placeholder={t('placeholder')}
           replyingTo={replyingTo ? {

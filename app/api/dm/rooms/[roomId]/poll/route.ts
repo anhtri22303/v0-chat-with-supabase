@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { attachReads, fetchReadsByMessageIds } from '@/lib/message-reads'
 
 export async function GET(
   request: NextRequest,
@@ -81,8 +82,27 @@ export async function GET(
     .eq('room_id', roomId)
     .gt('updated_at', new Date(Date.now() - 5000).toISOString())
 
+  const messages = data || []
+  const readsMap = await fetchReadsByMessageIds(
+    supabase,
+    'dm',
+    messages.map((m: any) => m.id),
+    user.id
+  )
+
+  // Also fetch any new reads for messages within the polling window so
+  // the client can update receipts on already-loaded messages.
+  const { data: recentReads } = await supabase
+    .from('message_reads')
+    .select('message_id, user_id, read_at, users:user_id(username, avatar_url)')
+    .eq('room_type', 'dm')
+    .eq('room_id', roomId)
+    .neq('user_id', user.id)
+    .gt('read_at', after)
+
   return NextResponse.json({
-    messages: data || [],
+    messages: attachReads(messages, readsMap),
+    reads: recentReads || [],
     deleted_ids: (deletedMessages || []).map((m: any) => m.id),
     typing: typingData || [],
     timestamp: new Date().toISOString(),
