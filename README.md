@@ -1,6 +1,6 @@
 <div align="center">
 
-# 💬 NexTalk
+# 💬 chaTchiT
 
 ### A production-grade real-time messaging platform
 
@@ -16,8 +16,7 @@
 
 ---
 
-<!-- Replace with your app screenshot -->
-> 📸 *Screenshot / GIF demo coming soon*
+![chaTchiT Demo](./public/demo.png)
 
 </div>
 
