@@ -1,6 +1,6 @@
 <div align="center">
 
-# 💬 chaTchiT
+# 💬 ChaTChiT
 
 ### A production-grade real-time messaging platform
 

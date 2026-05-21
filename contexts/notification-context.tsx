@@ -31,6 +31,9 @@ interface NotificationContextType {
   isLoading: boolean
   markRoomAsSeen: (roomId: string) => void
   refreshRooms: () => Promise<void>
+  newMessageRequestCount: number
+  spamMessageRequestCount: number
+  refreshMessageRequestCount: () => Promise<void>
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
@@ -51,6 +54,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [isLoading, setIsLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [serverMutes, setServerMutes] = useState<Record<string, {is_muted: boolean, muted_until: string | null}>>({})
+  const [newMessageRequestCount, setNewMessageRequestCount] = useState(0)
+  const [spamMessageRequestCount, setSpamMessageRequestCount] = useState(0)
+  const [newMessageRequestRoomIds, setNewMessageRequestRoomIds] = useState<Set<string>>(new Set())
 
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
@@ -114,6 +120,32 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [])
 
+  // Fetch message request count and room IDs
+  const fetchMessageRequestCount = useCallback(async () => {
+    const userId = currentUserIdRef.current
+    if (!userId) return
+
+    try {
+      // Fetch count
+      const countResponse = await fetch('/api/message-requests/count')
+      if (countResponse.ok) {
+        const countData = await countResponse.json()
+        setNewMessageRequestCount(countData.new || 0)
+        setSpamMessageRequestCount(countData.spam || 0)
+      }
+
+      // Fetch new message requests to get room IDs
+      const requestsResponse = await fetch('/api/message-requests?status=new')
+      if (requestsResponse.ok) {
+        const requestsData = await requestsResponse.json()
+        const roomIds = new Set<string>((requestsData.requests || []).map((r: any) => r.room_id as string))
+        setNewMessageRequestRoomIds(roomIds)
+      }
+    } catch (error) {
+      console.error('Error fetching message request count:', error)
+    }
+  }, [])
+
   // Check if room is muted (combines local and server checks)
   const isRoomMuted = useCallback((roomId: string, roomType?: 'dm' | 'club'): boolean => {
     // Check local first
@@ -163,7 +195,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             currentPathname.startsWith(`/dm/${room.id}/`) ||
             currentPathname.startsWith(`/clubs/${room.id}/`)
 
-          if (!isOwnMessage && !isCurrentRoom && !isRoomMuted(room.id, room.type === 'group' ? 'club' : room.type)) {
+          // Skip notifications for rooms with new message requests (not accepted yet)
+          const isNewMessageRequest = newMessageRequestRoomIds.has(room.id)
+
+          if (!isOwnMessage && !isCurrentRoom && !isRoomMuted(room.id, room.type === 'group' ? 'club' : room.type) && !isNewMessageRequest) {
             addedIds.push(room.id)
 
             // Show toast if we haven't shown it for this exact message time
@@ -197,7 +232,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [newMessageRequestRoomIds])
 
   // Handle a realtime new message event - show toast immediately without waiting for room refresh
   const handleRealtimeMessage = useCallback(async (payload: {
@@ -229,8 +264,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const room = currentRooms.find(r => r.id === roomId)
     const roomName = room?.name || (type === 'dm' ? t('directMessage') : t('groupChat'))
 
-    // Show toast immediately if not in the room and not muted
-    if (!isCurrentRoom && !isRoomMuted(roomId, type)) {
+    // Skip notifications for rooms with new message requests (not accepted yet)
+    const isNewMessageRequest = newMessageRequestRoomIds.has(roomId)
+
+    // Show toast immediately if not in the room, not muted, and not a new message request
+    if (!isCurrentRoom && !isRoomMuted(roomId, type) && !isNewMessageRequest) {
       const messageKey = `${roomId}-${msg.created_at}`
       if (!notifiedMessageTimesRef.current.has(messageKey)) {
         const toastDescription = msg.media_type === 'image'
@@ -257,7 +295,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // Refresh rooms to update sidebar with latest message
     fetchRooms()
-  }, [fetchRooms])
+  }, [fetchRooms, newMessageRequestRoomIds])
 
   // Subscribe to Supabase Realtime for instant notifications
   useEffect(() => {
@@ -316,18 +354,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // Initial fetch
     fetchRooms()
+    fetchMessageRequestCount()
 
     const intervalId = setInterval(fetchRooms, 5000)
     
-    // Also fetch server mutes periodically
+    // Also fetch server mutes and message request count periodically
     fetchServerMutes()
     const mutesIntervalId = setInterval(fetchServerMutes, 30000) // Every 30 seconds
+    const messageRequestsIntervalId = setInterval(fetchMessageRequestCount, 10000) // Every 10 seconds
     
     return () => {
       clearInterval(intervalId)
       clearInterval(mutesIntervalId)
+      clearInterval(messageRequestsIntervalId)
     }
-  }, [currentUserId, fetchRooms])
+  }, [currentUserId, fetchRooms, fetchMessageRequestCount, fetchServerMutes])
 
   const markRoomAsSeen = useCallback((roomId: string) => {
     setUnseenRoomIds(prev => {
@@ -344,7 +385,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     isLoading,
     markRoomAsSeen,
     refreshRooms: fetchRooms,
-  }), [rooms, unseenRoomIds, isLoading, markRoomAsSeen, fetchRooms])
+    newMessageRequestCount,
+    spamMessageRequestCount,
+    refreshMessageRequestCount: fetchMessageRequestCount,
+  }), [rooms, unseenRoomIds, isLoading, markRoomAsSeen, fetchRooms, newMessageRequestCount, spamMessageRequestCount, fetchMessageRequestCount])
 
   return (
     <NotificationContext.Provider value={contextValue}>

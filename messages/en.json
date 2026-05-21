@@ -25,7 +25,13 @@
     "ringtonePowerpoint": "PowerPoint",
     "ringbackSound": "Ringtone while calling",
     "ringbackMessenger": "Messenger",
-    "ringbackTutTut": "Classic (tut-tut)"
+    "ringbackTutTut": "Classic (tut-tut)",
+    "guest": "Guest",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "logout": "Log out"
   },
   "profile": {
     "editAvatar": "Edit profile photo",
@@ -103,7 +109,12 @@
     "confirmEmailMissingConfig": "Missing EmailJS configuration for confirmation email.",
     "confirmEmailError": "Failed to send confirmation email. Please try again.",
     "checkEmailConfirm": "Please check your email to confirm your account.",
-    "groupNameRequired": "Group name is required"
+    "groupNameRequired": "Group name is required",
+    "continueWithGoogle": "Continue with Google",
+    "orContinueWith": "Or continue with",
+    "googleSignInLoading": "Redirecting to Google...",
+    "continueWithFacebook": "Continue with Facebook",
+    "facebookSignInLoading": "Redirecting to Facebook..."
   },
   "chatWindow": {
     "loadFailed": "Failed to load messages",
@@ -295,6 +306,35 @@
     "videoPrefix": "[Video]",
     "directMessage": "Direct Message",
     "groupChat": "Group Chat"
+  },
+  "messageRequests": {
+    "title": "Message Requests",
+    "tabNew": "You May Know",
+    "tabSpam": "Spam",
+    "infoText": "You can open message requests to learn more about the sender. They won't know you've seen the message.",
+    "noNewRequests": "No message requests",
+    "noSpamRequests": "No spam messages",
+    "accept": "Accept",
+    "markAsSpam": "Spam",
+    "notSpam": "Not Spam",
+    "delete": "Delete",
+    "unknown": "Unknown User",
+    "noMessage": "Messages and calls are secured",
+    "fetchError": "Failed to load message requests",
+    "acceptSuccess": "Message request accepted",
+    "acceptError": "Failed to accept message request",
+    "spamSuccess": "Marked as spam",
+    "spamError": "Failed to mark as spam",
+    "deleteSuccess": "Message deleted",
+    "deleteError": "Failed to delete message"
+  },
+  "messageRequestDialog": {
+    "title": "Message Request",
+    "description": "This is the first time {name} has messaged you. Do you want to accept this message?",
+    "accept": "Accept",
+    "spam": "Mark as Spam",
+    "block": "Block",
+    "info": "The sender won't know you've seen this message until you accept."
   },
   "errors": {
     "generic": "Something went wrong",

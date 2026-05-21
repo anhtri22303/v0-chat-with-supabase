@@ -3,6 +3,17 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
+
+async function getSiteUrl(): Promise<string> {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL
+  }
+  const headersList = await headers()
+  const host = headersList.get('host') ?? 'localhost:3000'
+  const proto = headersList.get('x-forwarded-proto') ?? 'http'
+  return `${proto}://${host}`
+}
 
 export async function signUp(formData: FormData) {
   const supabase = await createClient()
@@ -126,4 +137,50 @@ export async function logOut() {
   await supabase.auth.signOut()
   revalidatePath('/', 'layout')
   redirect('/vi/auth/login')
+}
+
+export async function signInWithGoogle(locale: string = 'vi') {
+  const supabase = await createClient()
+  const baseUrl = await getSiteUrl()
+  const callbackUrl = `${baseUrl}/auth/callback?next=/${locale}/dashboard`
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: callbackUrl,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  })
+
+  if (error) {
+    redirect(`/${locale}/auth/login?error_description=${encodeURIComponent(error.message)}`)
+  }
+
+  if (data.url) {
+    redirect(data.url)
+  }
+}
+
+export async function signInWithFacebook(locale: string = 'vi') {
+  const supabase = await createClient()
+  const baseUrl = await getSiteUrl()
+  const callbackUrl = `${baseUrl}/auth/callback?next=/${locale}/dashboard`
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'facebook',
+    options: {
+      redirectTo: callbackUrl,
+    },
+  })
+
+  if (error) {
+    redirect(`/${locale}/auth/login?error_description=${encodeURIComponent(error.message)}`)
+  }
+
+  if (data.url) {
+    redirect(data.url)
+  }
 }

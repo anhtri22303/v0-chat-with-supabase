@@ -14,6 +14,7 @@ import { useIsLargeScreen } from '@/hooks/use-media-query'
 import { useCall } from '@/contexts/call-context'
 import { useTranslations } from 'next-intl'
 import { useThemeColor, type ThemeSettings } from '@/components/chat/theme-picker'
+import { MessageRequestDialog } from '@/components/chat/message-request-dialog'
 
 export default function DMChatPage() {
   const router = useRouter()
@@ -35,6 +36,12 @@ export default function DMChatPage() {
     backgroundValue: null,
     backgroundOpacity: 1.0,
   })
+  const [messageRequest, setMessageRequest] = useState<{
+    id: string
+    status: string
+    sender: { id: string; username: string; avatar_url: string | null }
+  } | null>(null)
+  const [showMessageRequestDialog, setShowMessageRequestDialog] = useState(false)
   const isLargeScreen = useIsLargeScreen()
 
   const { markRoomAsSeen, rooms } = useNotifications()
@@ -99,6 +106,31 @@ export default function DMChatPage() {
         const roomTheme = await getThemeForRoom(roomId, 'dm')
         console.log('[Theme Debug] Loaded theme:', roomTheme)
         setThemeSettings(roomTheme)
+
+        // Check for message request
+        const { data: messageRequestData } = await supabase
+          .from('message_requests')
+          .select('id, status, sender_id')
+          .eq('room_id', roomId)
+          .eq('user_id', authUser.id)
+          .eq('status', 'new')
+          .single()
+
+        if (messageRequestData) {
+          // Fetch sender info separately
+          const { data: senderData } = await supabase
+            .from('users')
+            .select('id, username, avatar_url')
+            .eq('id', messageRequestData.sender_id)
+            .single()
+
+          setMessageRequest({
+            id: messageRequestData.id,
+            status: messageRequestData.status,
+            sender: senderData || { id: messageRequestData.sender_id, username: 'Unknown', avatar_url: null },
+          })
+          setShowMessageRequestDialog(true)
+        }
 
         // Fetch last_seen separately — non-blocking, gracefully fails if migration not run
         ;(async () => {
@@ -181,6 +213,16 @@ export default function DMChatPage() {
 
   return (
     <ChatLayout>
+      {messageRequest && (
+        <MessageRequestDialog
+          open={showMessageRequestDialog}
+          onOpenChange={setShowMessageRequestDialog}
+          requestId={messageRequest.id}
+          roomId={roomId}
+          sender={messageRequest.sender}
+          onAccepted={() => setMessageRequest(null)}
+        />
+      )}
       <div className="flex h-full min-w-0 bg-background">
         <div className="flex flex-col flex-1 min-w-0">
           <ChatHeader

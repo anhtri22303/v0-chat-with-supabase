@@ -25,7 +25,13 @@
     "ringtonePowerpoint": "PowerPoint",
     "ringbackSound": "Nhạc chờ khi gọi",
     "ringbackMessenger": "Messenger",
-    "ringbackTutTut": "Cổ điển (tít-tít)"
+    "ringbackTutTut": "Cổ điển (tít-tít)",
+    "guest": "Khách",
+    "theme": "Giao diện",
+    "themeLight": "Sáng",
+    "themeDark": "Tối",
+    "themeSystem": "Hệ thống",
+    "logout": "Đăng xuất"
   },
   "profile": {
     "editAvatar": "Chỉnh sửa ảnh đại diện",
@@ -103,7 +109,12 @@
     "confirmEmailMissingConfig": "Thiếu cấu hình EmailJS cho email xác nhận.",
     "confirmEmailError": "Không thể gửi email xác nhận. Vui lòng thử lại.",
     "checkEmailConfirm": "Vui lòng kiểm tra email để xác nhận tài khoản.",
-    "groupNameRequired": "Tên nhóm là bắt buộc"
+    "groupNameRequired": "Tên nhóm là bắt buộc",
+    "continueWithGoogle": "Tiếp tục với Google",
+    "orContinueWith": "Hoặc tiếp tục với",
+    "googleSignInLoading": "Đang chuyển hướng đến Google...",
+    "continueWithFacebook": "Tiếp tục với Facebook",
+    "facebookSignInLoading": "Đang chuyển hướng đến Facebook..."
   },
   "chatWindow": {
     "loadFailed": "Không thể tải tin nhắn",
@@ -295,6 +306,35 @@
     "videoPrefix": "[Video]",
     "directMessage": "Tin nhắn trực tiếp",
     "groupChat": "Nhóm chat"
+  },
+  "messageRequests": {
+    "title": "Tin nhắn đang chờ",
+    "tabNew": "Có thể bạn biết",
+    "tabSpam": "Spam",
+    "infoText": "Bạn có thể mở tin nhắn đang chờ để biết thêm thông tin về người gửi. Họ sẽ không biết là bạn đã mở tin nhắn.",
+    "noNewRequests": "Không có tin nhắn đang chờ",
+    "noSpamRequests": "Không có tin nhắn spam",
+    "accept": "Chấp nhận",
+    "markAsSpam": "Spam",
+    "notSpam": "Không spam",
+    "delete": "Xóa",
+    "unknown": "Người dùng không xác định",
+    "noMessage": "Tin nhắn và cuộc gọi được bảo mật",
+    "fetchError": "Không thể tải tin nhắn đang chờ",
+    "acceptSuccess": "Đã chấp nhận tin nhắn",
+    "acceptError": "Không thể chấp nhận tin nhắn",
+    "spamSuccess": "Đã đánh dấu spam",
+    "spamError": "Không thể đánh dấu spam",
+    "deleteSuccess": "Đã xóa tin nhắn",
+    "deleteError": "Không thể xóa tin nhắn"
+  },
+  "messageRequestDialog": {
+    "title": "Tin nhắn đang chờ",
+    "description": "Đây là lần đầu tiên {name} nhắn tin cho bạn. Bạn có muốn chấp nhận tin nhắn này?",
+    "accept": "Chấp nhận",
+    "spam": "Đánh dấu spam",
+    "block": "Chặn",
+    "info": "Người gửi sẽ không biết bạn đã xem tin nhắn này cho đến khi bạn chấp nhận."
   },
   "errors": {
     "generic": "Đã xảy ra lỗi",

@@ -21,16 +21,18 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Loader2, LogOut, MessageSquarePlus, Settings } from 'lucide-react'
+import { Loader2, LogOut, MessageSquarePlus, Settings, Inbox } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { useNotifications } from '@/contexts/notification-context'
 import { UserSearch } from '@/components/home/user-search'
 import { CreateGroupModal } from '@/components/home/create-group-modal'
 import { RoomCard } from '@/components/home/room-card'
 import { toast } from 'sonner'
-import { useNotifications } from '@/contexts/notification-context'
-import { ThemeToggle } from '@/components/theme-toggle'
+import { useTheme } from 'next-themes'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { AvatarEditModal } from '@/components/profile/avatar-edit-modal'
+import Image from 'next/image'
 
 export function GlobalSidebar() {
   const router = useRouter()
@@ -67,7 +69,7 @@ export function GlobalSidebar() {
     setNotificationSound(sound)
     setNotificationSoundState(sound)
   }
-  const { rooms, unseenRoomIds, isLoading, refreshRooms } = useNotifications()
+  const { rooms, unseenRoomIds, isLoading, refreshRooms, newMessageRequestCount } = useNotifications()
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false)
 
   // Track initial load completion
@@ -151,10 +153,37 @@ export function GlobalSidebar() {
 
   const dmRooms = rooms.filter((r) => r.type === 'dm') as any
 
+  // Theme toggle submenu component
+  function ThemeToggleMenu() {
+    const { theme, setTheme } = useTheme()
+    return (
+      <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+        <DropdownMenuRadioItem value="light">{t('themeLight')}</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="dark">{t('themeDark')}</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="system">{t('themeSystem')}</DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full bg-card/50">
       {/* Sidebar Header */}
       <div className="p-4 border-b flex items-center justify-between gap-2 bg-card">
+        <button
+          type="button"
+          onClick={() => router.push(`/${locale}/dashboard`)}
+          className="flex-shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+          aria-label="Go to dashboard"
+          title="Go to dashboard"
+        >
+          <Image
+            src="/Logo_ChaTChiT.svg"
+            alt="ChaTChiT"
+            width={52}
+            height={52}
+            className="rounded-xl"
+          />
+        </button>
         <button
           type="button"
           onClick={() => setAvatarModalOpen(true)}
@@ -173,11 +202,10 @@ export function GlobalSidebar() {
           </span>
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-base truncate">{profile?.username || 'ChaTChiT'}</h2>
+          <h2 className="font-bold text-base truncate">{profile?.username || t('guest')}</h2>
           <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
         </div>
         <div className="flex items-center gap-1">
-          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground">
@@ -185,7 +213,20 @@ export function GlobalSidebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem>{t('pendingMessages')}</DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => router.push(`/${locale}/message-requests`)}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <Inbox className="h-4 w-4" />
+                  {t('pendingMessages')}
+                </span>
+                {newMessageRequestCount > 0 && (
+                  <Badge variant="destructive" className="h-5 min-w-5 px-1 text-[10px]">
+                    {newMessageRequestCount > 99 ? '99+' : newMessageRequestCount}
+                  </Badge>
+                )}
+              </DropdownMenuItem>
               <DropdownMenuItem>{t('archivedChats')}</DropdownMenuItem>
               <DropdownMenuItem>{t('restrictedAccount')}</DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -199,6 +240,12 @@ export function GlobalSidebar() {
                     <DropdownMenuRadioItem value="en">{t('english')}</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="vi">{t('vietnamese')}</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{t('theme')}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent sideOffset={2} avoidCollisions alignOffset={-4}>
+                  <ThemeToggleMenu />
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSub>
@@ -236,13 +283,14 @@ export function GlobalSidebar() {
                   </DropdownMenuSub>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => (document.getElementById('logout-form') as HTMLFormElement | null)?.requestSubmit()} className="text-red-500 focus:text-red-500 font-medium">
+                <LogOut className="h-4 w-4 mr-2" />
+                {t('logout')}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <form action={logOut}>
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </form>
+          <form id="logout-form" action={logOut} className="hidden" />
         </div>
       </div>
 

@@ -19,19 +19,17 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
+        url: '/Logo_ChaTChiT.ico',
+        sizes: '32x32',
+        type: 'image/x-icon',
       },
       {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
+        url: '/Logo_ChaTChiT.svg',
         type: 'image/svg+xml',
       },
     ],
-    apple: '/apple-icon.png',
+    shortcut: '/Logo_ChaTChiT.ico',
+    apple: '/Logo_ChaTChiT.png',
   },
 }
 
