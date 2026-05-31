@@ -1,0 +1,49 @@
+name: Keep Alive
+
+on:
+  schedule:
+    # Chạy mỗi 2 ngày lúc 08:00 UTC
+    - cron: '0 8 */2 * *'
+  workflow_dispatch: # Cho phép chạy thủ công
+
+jobs:
+  ping-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Health Endpoint
+        id: ping_health
+        run: |
+          echo "Pinging health endpoint..."
+          response=$(curl -s -w "\n%{http_code}" https://chatchit-mess.vercel.app/api/health || echo "")
+          
+          if [ -z "$response" ]; then
+            echo "Health endpoint failed (no response)"
+            echo "health_status=fail" >> $GITHUB_OUTPUT
+          else
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+            
+            if [ "$http_code" = "200" ]; then
+              echo "Health endpoint OK: $body"
+              echo "health_status=ok" >> $GITHUB_OUTPUT
+            else
+              echo "Health endpoint failed with status $http_code: $body"
+              echo "health_status=fail" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Fallback Ping Homepage
+        if: steps.ping_health.outputs.health_status == 'fail'
+        run: |
+          echo "Health endpoint failed, pinging homepage as fallback..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://chatchit-mess.vercel.app/)
+          
+          if [ "$response" = "200" ] || [ "$response" = "307" ] || [ "$response" = "308" ]; then
+            echo "Homepage ping OK (status: $response)"
+          else
+            echo "Homepage ping returned status: $response"
+          fi
+
+      - name: Log Result
+        run: |
+          echo "Keep alive job completed at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
